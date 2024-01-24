@@ -1,0 +1,49 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 09c0d7b36e9f37349991f4a5f3fb7081, type: 3}
+  m_Name: PistolConfiguration
+  m_EditorClassIdentifier: 
+  _shootingConfiguration:
+    _fireMode: 0
+    _fireRate: 0.35
+    _shotDamage: 50
+    _shootableLayerName: Shootable
+  _aimingConfiguration:
+    _aimingSpeed: 10
+    _aimingZoomInAmount: 0.15
+    _aimingSwayHorizontalMovement: 0.25
+    _aimingSwayVerticalMovement: 0.1
+    _aimingSwaySpeed: 0.8
+  _recoilConfiguration:
+    _rotationReturnSpeed: 2
+    _positionReturnSpeed: 7
+    _rotationalRecoilSpeed: 3
+    _recoilRotation: {x: 10, y: 2, z: 0}
+    _recoilKickBackMinAmount: 0.03
+    _recoilKickBackMaxAmount: 0.065
+    _recoilAimingRotation: {x: 6, y: 0.15, z: 0}
+    _recoilKickBackMinAmountWhenAiming: 0.02
+    _recoilKickBackMaxAmountWhenAiming: 0.028
+  _swayConfiguration:
+    _linearSwayAmount: 0.2
+    _linearSwayAmountWhenAiming: 0.05
+    _linearSwaySmooth: 11
+    _linearSwayMaxAmount: 0.65
+    _rotationalSwayAmount: 15
+    _rotationalSwayAmountWhenAiming: 9
+    _rotationalSwaySmooth: 19
+    _rotationalSwayMaxAmount: 20
+  _soundsConfiguration:
+    _shotAudioName: Pistol_Shot
+    _holsterAudioName: Weapon_Holster
+    _hideAudioName: Weapon_Hide
+    _reloadAudioName: MP5_Reload

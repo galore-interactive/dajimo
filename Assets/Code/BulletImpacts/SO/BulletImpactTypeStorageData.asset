@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6a638456c35537b4ea09111a01c216cc, type: 3}
+  m_Name: BulletImpactTypeStorageData
+  m_EditorClassIdentifier: 
+  _bulletImpactTypes:
+  - _type: Concrete
+    _bulletImpactPrefab: {fileID: 7505584126761337955, guid: 172a2bf12ece70843bd8853432093c32,
+      type: 3}
+    _bulletImpactSounds:
+    - BulletImpactConcrete1
+    - BulletImpactConcrete2
+    - BulletImpactConcrete3
+    - BulletImpactConcrete4
+  - _type: Metal
+    _bulletImpactPrefab: {fileID: 7505584126761337955, guid: 4caaf0d69e6b9254ca2aa639652802f0,
+      type: 3}
+    _bulletImpactSounds:
+    - BulletImpactMetal1
+    - BulletImpactMetal2
+  _bulletImpactSoundPrefab: {fileID: 3751517982654578619, guid: 304eeb8c200e06b418a11da513d316f5,
+    type: 3}

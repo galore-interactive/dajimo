@@ -1,0 +1,46 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 09c0d7b36e9f37349991f4a5f3fb7081, type: 3}
+  m_Name: ARConfiguration
+  m_EditorClassIdentifier: 
+  _shootingConfiguration:
+    _fireMode: 1
+    _fireRate: 0.12
+    _shotDamage: 15
+    _shootableLayerName: Shootable
+  _aimingConfiguration:
+    _aimingSpeed: 10
+    _aimingZoomInAmount: 0.15
+    _aimingSwayHorizontalMovement: 0.25
+    _aimingSwayVerticalMovement: 0.1
+    _aimingSwaySpeed: 0.8
+  _recoilConfiguration:
+    _rotationReturnSpeed: 3
+    _rotationalRecoilSpeed: 1.5
+    _recoilRotation: {x: 2, y: 2, z: 0}
+    _recoilAimingRotation: {x: 0.8, y: 1.2, z: 0}
+  _swayConfiguration:
+    _linearSwayAmount: 0.05
+    _linearSwayAmountWhenAiming: 0.005
+    _linearSwaySmooth: 8
+    _linearSwayMaxAmount: 0.08
+    _horizontalRotationalSwayAmount: 5
+    _verticalRotationalSwayAmount: 1.7
+    _horizontalRotationalSwayAmountWhenAiming: 2.6
+    _verticalRotationalSwayAmountWhenAiming: 3
+    _rotationalSwaySmooth: 8
+    _rotationalSwayMaxAmount: 11
+  _soundsConfiguration:
+    _shotAudioName: MP5_Shot
+    _holsterAudioName: Weapon_Holster
+    _hideAudioName: Weapon_Hide
+    _reloadAudioName: MP5_Reload
