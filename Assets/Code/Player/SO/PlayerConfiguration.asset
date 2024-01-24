@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0b63c8e7851fbc740890994655e8a3c7, type: 3}
+  m_Name: PlayerConfiguration
+  m_EditorClassIdentifier: 
+  _movementConfiguration:
+    _walkingSpeed: 4
+    _runningSpeed: 6
+    _crouchingSpeed: 1
+    _movementAccelerationTime: 0.1
+    _aimingSpeed: 1.9
+  _crouchStandConfiguration:
+    _crouchHeight: 1
+    _standHeight: 1.8
+    _crouchSpeed: 0.1
+    _crouchCharacterControllerCenter: {x: 0, y: 0.5, z: 0}
+    _standCharacterControllerCenter: {x: 0, y: 0.9, z: 0}
+  _cameraMovementConfiguration:
+    _mouseSensitivity: 64
+    _cameraMovementAcceleration: 0.1
+    _verticalClampAngle: 80
+  _armsSwayConfiguration:
+    _linearSwayAmount: 0.05
+    _linearSwayAmountWhenAiming: 0.005
+    _linearSwaySmooth: 8
+    _linearSwayMaxAmount: 0.8
+    _horizontalRotationalSwayAmount: 5
+    _verticalRotationalSwayAmount: 1.7
+    _horizontalRotationalSwayAmountWhenAiming: 2.6
+    _verticalRotationalSwayAmountWhenAiming: 3
+    _rotationalSwaySmooth: 8
+    _rotationalSwayMaxAmount: 11

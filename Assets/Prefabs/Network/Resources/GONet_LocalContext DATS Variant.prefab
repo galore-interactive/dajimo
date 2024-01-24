@@ -1,0 +1,106 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1001 &5331309026920161193
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 813501420998215093, guid: 338c05f05b3eb634894468e022a5a11f,
+        type: 3}
+      propertyPath: codeGenerationId
+      value: 3
+      objectReference: {fileID: 0}
+    - target: {fileID: 813501420998215093, guid: 338c05f05b3eb634894468e022a5a11f,
+        type: 3}
+      propertyPath: designTimeLocation
+      value: project://Assets/Prefabs/Network/Resources/GONet_LocalContext DATS Variant.prefab
+      objectReference: {fileID: 0}
+    - target: {fileID: 1515797557730642417, guid: 338c05f05b3eb634894468e022a5a11f,
+        type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1515797557730642417, guid: 338c05f05b3eb634894468e022a5a11f,
+        type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1515797557730642417, guid: 338c05f05b3eb634894468e022a5a11f,
+        type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1515797557730642417, guid: 338c05f05b3eb634894468e022a5a11f,
+        type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1515797557730642417, guid: 338c05f05b3eb634894468e022a5a11f,
+        type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1515797557730642417, guid: 338c05f05b3eb634894468e022a5a11f,
+        type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1515797557730642417, guid: 338c05f05b3eb634894468e022a5a11f,
+        type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1515797557730642417, guid: 338c05f05b3eb634894468e022a5a11f,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1515797557730642417, guid: 338c05f05b3eb634894468e022a5a11f,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1515797557730642417, guid: 338c05f05b3eb634894468e022a5a11f,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1664306667400202712, guid: 338c05f05b3eb634894468e022a5a11f,
+        type: 3}
+      propertyPath: m_Name
+      value: GONet_LocalContext DATS Variant
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 1664306667400202712, guid: 338c05f05b3eb634894468e022a5a11f,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: -5291424504057472038}
+  m_SourcePrefab: {fileID: 100100000, guid: 338c05f05b3eb634894468e022a5a11f, type: 3}
+--- !u!1 &6837681706629912177 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 1664306667400202712, guid: 338c05f05b3eb634894468e022a5a11f,
+    type: 3}
+  m_PrefabInstance: {fileID: 5331309026920161193}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &-5291424504057472038
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6837681706629912177}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1775dd81c1c469540a102b9de3e6ce4d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  isTickReceiver: 0
+  currentTeamColor: 0
+  _isBipedInRagdollState: 0
+  _currentPlayerType: 0

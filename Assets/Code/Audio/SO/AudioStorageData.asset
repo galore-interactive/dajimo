@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f159d66d1f72bee4695d21791b6606a4, type: 3}
+  m_Name: AudioStorageData
+  m_EditorClassIdentifier: 
+  _audios:
+  - _name: MP5_Shot
+    _audio: {fileID: 8300000, guid: c4642446cb0a7184485b5f2fe668d8cb, type: 3}
+  - _name: MP5_Reload
+    _audio: {fileID: 8300000, guid: cc988050393583047ad560d1ce931d72, type: 3}
+  - _name: Weapon_Hide
+    _audio: {fileID: 8300000, guid: 4005584ecbb57c047b06b9dae3713b86, type: 3}
+  - _name: Weapon_Holster
+    _audio: {fileID: 8300000, guid: c10e54b870e8bdc4baf9f0be9045e0b1, type: 3}
+  - _name: Pistol_Shot
+    _audio: {fileID: 8300000, guid: d11df7493f01acf489ee42cc2b8e8795, type: 3}
+  - _name: BulletImpactConcrete1
+    _audio: {fileID: 8300000, guid: e516ceace47df4941b4005c18478b81b, type: 3}
+  - _name: BulletImpactConcrete2
+    _audio: {fileID: 8300000, guid: a6fcd27717ad6494f9b0a7509114791b, type: 3}
+  - _name: BulletImpactConcrete3
+    _audio: {fileID: 8300000, guid: 1f9782d7781caef43a8b5b4aeeb38692, type: 3}
+  - _name: BulletImpactConcrete4
+    _audio: {fileID: 8300000, guid: 4af30122c31d5a34f80c41281ce9620c, type: 3}
+  - _name: BulletImpactMetal1
+    _audio: {fileID: 8300000, guid: 59f4cfefc64c0984c8f6d2b8b1c6d92f, type: 3}
+  - _name: BulletImpactMetal2
+    _audio: {fileID: 8300000, guid: 5d932618ff280d24ebc8dfe35d94e1ef, type: 3}
+  - _name: BulletImpactMetal3
+    _audio: {fileID: 8300000, guid: 8347a1f2a801c9946a0de5776d98165d, type: 3}

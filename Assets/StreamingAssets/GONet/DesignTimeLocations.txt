@@ -1,0 +1,37 @@
+project://Assets/Code/GONetTesting/Resources/GONetTestObject.prefab
+project://Assets/GONet/Resources/GONet/GONet_GlobalContext.prefab
+project://Assets/GONet/Resources/GONet/GONet_LocalContext.prefab
+project://Assets/GONet/Sample/Projectile/Resources/CannonBall.prefab
+project://Assets/Prefabs/Drone/Resources/Drone.prefab
+project://Assets/Prefabs/Network/Resources/EntityStateSynchronizer.prefab
+project://Assets/Prefabs/Network/Resources/GONet_LocalContext DATS Variant.prefab
+project://Assets/Prefabs/Network/Resources/MannequinTarget.prefab
+project://Assets/Prefabs/Network/Resources/TemporaryNeworkEntity.prefab
+project://Assets/Prefabs/Obstacles/Resources/PlaceableObstacle.prefab
+project://Assets/Prefabs/Player/Resources/PlayerFPS.prefab
+scene://DATS_Main/GONet_GlobalContext
+scene://DATS_Main/NetworkController
+scene://DroneOfflineTest/Drone
+scene://GONet_RPC_Test/GONetGlobalContext
+scene://GONetInstantiationTest/GONet_GlobalContext
+scene://ProjectileTest/GONet_GlobalContext
+scene://SampleScene/GONet_GlobalContext
+scene://SampleScene/MannequinTargets/MannequinTarget
+scene://SampleScene/MannequinTargets/MannequinTarget (1)
+scene://SampleScene/MannequinTargets/MannequinTarget (10)
+scene://SampleScene/MannequinTargets/MannequinTarget (11)
+scene://SampleScene/MannequinTargets/MannequinTarget (12)
+scene://SampleScene/MannequinTargets/MannequinTarget (13)
+scene://SampleScene/MannequinTargets/MannequinTarget (14)
+scene://SampleScene/MannequinTargets/MannequinTarget (15)
+scene://SampleScene/MannequinTargets/MannequinTarget (16)
+scene://SampleScene/MannequinTargets/MannequinTarget (17)
+scene://SampleScene/MannequinTargets/MannequinTarget (2)
+scene://SampleScene/MannequinTargets/MannequinTarget (3)
+scene://SampleScene/MannequinTargets/MannequinTarget (4)
+scene://SampleScene/MannequinTargets/MannequinTarget (5)
+scene://SampleScene/MannequinTargets/MannequinTarget (6)
+scene://SampleScene/MannequinTargets/MannequinTarget (7)
+scene://SampleScene/MannequinTargets/MannequinTarget (8)
+scene://SampleScene/MannequinTargets/MannequinTarget (9)
+scene://SampleScene/NetworkController
