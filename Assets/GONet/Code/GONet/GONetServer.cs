@@ -29,6 +29,8 @@ namespace GONet
     {
         public int MaxClientCount { get; private set; }
 
+        public bool IsRunning => server != default && server.IsRunning;
+
         Server server;
         public uint numConnections = 0;
         public readonly List<GONetRemoteClient> remoteClients;

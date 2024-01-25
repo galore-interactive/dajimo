@@ -904,14 +904,14 @@ PlayerSettings:
     0: LOG_WARNING;LOG_ERROR;LOG_FATAL;LOG_DEBUG;LOG_INFO
     1: LOG_DEBUG;LOG_INFO;LOG_WARNING;LOG_ERROR;LOG_FATAL
     Server: 
-    Standalone: 
+    Standalone: MIRROR;MIRROR_57_0_OR_NEWER;MIRROR_58_0_OR_NEWER;MIRROR_65_0_OR_NEWER;MIRROR_66_0_OR_NEWER;MIRROR_2022_9_OR_NEWER;MIRROR_2022_10_OR_NEWER;MIRROR_70_0_OR_NEWER;MIRROR_71_0_OR_NEWER;MIRROR_73_OR_NEWER;MIRROR_78_OR_NEWER;MIRROR_79_OR_NEWER;FISHNET;FISHNET_V3
   additionalCompilerArguments:
     1: []
     Server: []
   platformArchitecture: {}
   scriptingBackend:
     Android: 1
-    Server: 1
+    Server: 0
     Standalone: 0
   il2cppCompilerConfiguration:
     Standalone: 2

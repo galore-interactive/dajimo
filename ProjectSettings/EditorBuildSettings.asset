@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/Hathora/Demos/1-FishNetDemo/HathoraDemoScene-FishNet.unity
+    guid: 4680c4744e9021f469e23205b96fdcd5
+  - enabled: 0
     path: Assets/Scenes/DATS_Main.unity
     guid: 8885fdacb0ec87a4bb53bb0a0df6861e
   - enabled: 0
