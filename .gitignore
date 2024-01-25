@@ -6,6 +6,7 @@
 /[Tt]emp/
 /[Oo]bj/
 /[Bb]uild_*/
+/[Bb]uild-Server/
 /[Bb]uild/
 /[Bb]uilds/
 /[Bb]uilds_*/
