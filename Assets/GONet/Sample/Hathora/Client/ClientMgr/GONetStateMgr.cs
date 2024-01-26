@@ -1,6 +1,5 @@
 using Hathora.Demos.Shared.Scripts.Common;
 using UnityEngine;
-using UnityEngine.Assertions;
 
 namespace GONet.Hathora
 {

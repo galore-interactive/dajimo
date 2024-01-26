@@ -58,7 +58,7 @@ namespace GONet
         public IEnumerable<GONetParticipant> EnabledGONetParticipants => enabledGONetParticipants;
 
         public static readonly string ServerIPAddress_Default = GONetMain.isServerOverride ? "0.0.0.0" : "xrr504.edge.hathora.dev";
-        public const int ServerPort_Default = 40000;
+        public const int ServerPort_Default = 23427;
 
         //public static readonly string ServerIPAddress_Default = GONetMain.isServerOverride ? "0.0.0.0" : "127.0.0.1";
         //public const int ServerPort_Default = 40000;

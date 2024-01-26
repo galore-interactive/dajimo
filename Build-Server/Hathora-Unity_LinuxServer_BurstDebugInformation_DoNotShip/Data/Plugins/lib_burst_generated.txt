@@ -3,311 +3,60 @@ Library: D:\projects\unity\gonet_sample_games\dajimo\Temp\BurstOutput\Data\Plugi
 --backend=burst-llvm-15
 --target=AVX2
 --global-safety-checks-setting=Off
---disable-safety-checks
 --meta-data-generation=False
 --dump=Function
 --float-precision=Standard
 --target-framework=NetFramework
---float-mode=Fast
---assembly-defines=UnityEngine;
 --assembly-defines=Assembly-CSharp;
---assembly-defines=FishNet.Demos;
---assembly-defines=Mirror.Transports;
---assembly-defines=Unity.RenderPipelines.Core.Runtime;
---assembly-defines=Unity.ProBuilder.Stl;
---assembly-defines=Unity.AI.Navigation;
---assembly-defines=FishNet.Example;
---assembly-defines=Unity.ProBuilder.Csg;
---assembly-defines=HathoraCommon;
---assembly-defines=Unity.RenderPipelines.Core.ShaderLibrary;
---assembly-defines=kcp2k;
---assembly-defines=Unity.Collections;
---assembly-defines=Unity.ProBuilder.Poly2Tri;
---assembly-defines=Mirror.Components;
---assembly-defines=Unity.TextMeshPro;
---assembly-defines=Mirror.Authenticators;
---assembly-defines=Mirror.Examples;
---assembly-defines=MemoryPack;
---assembly-defines=Unity.RenderPipelines.ShaderGraph.ShaderGraphLibrary;
---assembly-defines=Telepathy;
---assembly-defines=FishNet.Runtime;
---assembly-defines=Unity.RenderPipelines.Universal.Runtime;
---assembly-defines=Unity.Burst;
---assembly-defines=Unity.ProBuilder;
---assembly-defines=MirrorSimpleWebTransport;
---assembly-defines=Hathora.Demos.Shared;
---assembly-defines=Hathora.Cloud.Sdk;
---assembly-defines=Unity.RenderPipeline.Universal.ShaderLibrary;
---assembly-defines=Unity.InputSystem;
---assembly-defines=Unity.InputSystem.ForUI;
 --assembly-defines=BayouSimpleWebTransport;
---assembly-defines=Unity.ProBuilder.KdTree;
---assembly-defines=Unity.Mathematics;
---assembly-defines=HathoraClient;
---assembly-defines=Unity.RenderPipelines.Universal.Shaders;
---assembly-defines=IngameDebugConsole.Runtime;
---assembly-defines=Mirror;
 --assembly-defines=Cinemachine;
+--assembly-defines=FishNet.Demos;
+--assembly-defines=FishNet.Example;
+--assembly-defines=FishNet.Runtime;
+--assembly-defines=Hathora.Cloud.Sdk;
+--assembly-defines=Hathora.Demos.Shared;
+--assembly-defines=HathoraClient;
+--assembly-defines=HathoraCommon;
 --assembly-defines=HathoraServer;
---assembly-defines=Unity.Collections.LowLevel.ILSupport;
---assembly-defines=System.Runtime.CompilerServices.Unsafe;
---assembly-defines=FishNet.CodeAnalysis;
---assembly-defines=Moq;
---assembly-defines=System.Diagnostics.EventLog;
---assembly-defines=Common.Logging;
---assembly-defines=Unity.Burst.Unsafe;
+--assembly-defines=IngameDebugConsole.Runtime;
+--assembly-defines=kcp2k;
 --assembly-defines=log4net;
---assembly-defines=Newtonsoft.Json;
---assembly-defines=Castle.Core;
---assembly-defines=Accessibility;
---assembly-defines=System.Runtime;
---assembly-defines=System.Security.Principal.Windows;
---assembly-defines=netstandard;
---assembly-defines=Mono.Data.Sqlite;
---assembly-defines=Mono.Posix;
+--assembly-defines=MemoryPack;
+--assembly-defines=Mirror.Authenticators;
+--assembly-defines=Mirror.Components;
+--assembly-defines=Mirror;
+--assembly-defines=Mirror.Examples;
+--assembly-defines=Mirror.Transports;
+--assembly-defines=MirrorSimpleWebTransport;
 --assembly-defines=Mono.Security;
---assembly-defines=Mono.WebBrowser;
---assembly-defines=Novell.Directory.Ldap;
---assembly-defines=System.ComponentModel.Composition;
---assembly-defines=System.ComponentModel.DataAnnotations;
+--assembly-defines=mscorlib;
+--assembly-defines=Newtonsoft.Json;
 --assembly-defines=System.Configuration;
 --assembly-defines=System.Core;
---assembly-defines=System.Data.DataSetExtensions;
 --assembly-defines=System.Data;
---assembly-defines=System.Design;
---assembly-defines=System.DirectoryServices;
---assembly-defines=System.Drawing.Design;
---assembly-defines=System.Drawing;
---assembly-defines=System.EnterpriseServices;
---assembly-defines=System.IO.Compression.FileSystem;
+--assembly-defines=System;
 --assembly-defines=System.IO.Compression;
 --assembly-defines=System.Net.Http;
 --assembly-defines=System.Numerics;
---assembly-defines=System.Runtime.Serialization.Formatters.Soap;
+--assembly-defines=System.Runtime.CompilerServices.Unsafe;
 --assembly-defines=System.Runtime.Serialization;
---assembly-defines=System.Security;
---assembly-defines=System.ServiceModel.Internals;
---assembly-defines=System.Transactions;
---assembly-defines=System.Web.ApplicationServices;
---assembly-defines=System.Web.Services;
 --assembly-defines=System.Web;
---assembly-defines=System.Windows.Forms;
---assembly-defines=System.Xml.Linq;
 --assembly-defines=System.Xml;
---assembly-defines=System;
---assembly-defines=mscorlib;
---generate-link-xml=Temp\burst.link.xml
---temp-folder=D:\projects\unity\gonet_sample_games\dajimo\Temp\Burst
---key-folder=C:/Program Files/Unity/Hub/Editor/2022.3.12f1/Editor/Data/PlaybackEngines/LinuxStandaloneSupport
---decode-folder=D:\projects\unity\gonet_sample_games\dajimo\Library\Burst
---output=D:\projects\unity\gonet_sample_games\dajimo\Temp\BurstOutput\Data\Plugins\lib_burst_generated
---pdb-search-paths=Temp/ManagedSymbols/
-
---method=Unity.Jobs.IJobForExtensions+ForJobStruct`1[[UnityEngine.Rendering.Universal.ZBinningJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.ZBinningJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--77fc393cb521ac129b1392d4eb94d29a
---method=Unity.Jobs.IJobForExtensions+ForJobStruct`1[[UnityEngine.Rendering.Universal.TileRangeExpansionJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.TileRangeExpansionJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--adceb2156d08d59afc9749dc2521fd2b
---method=Unity.Jobs.IJobForExtensions+ForJobStruct`1[[UnityEngine.Rendering.Universal.TilingJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.TilingJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--a6f5259e22ed809ef3937424c4bd686d
---platform=Linux
---backend=burst-llvm-15
---target=X64_SSE2
---global-safety-checks-setting=Off
---disable-safety-checks
---meta-data-generation=False
---dump=Function
---float-precision=Standard
---target-framework=NetFramework
---float-mode=Fast
---assembly-defines=UnityEngine;
---assembly-defines=Assembly-CSharp;
---assembly-defines=FishNet.Demos;
---assembly-defines=Mirror.Transports;
---assembly-defines=Unity.RenderPipelines.Core.Runtime;
---assembly-defines=Unity.ProBuilder.Stl;
---assembly-defines=Unity.AI.Navigation;
---assembly-defines=FishNet.Example;
---assembly-defines=Unity.ProBuilder.Csg;
---assembly-defines=HathoraCommon;
---assembly-defines=Unity.RenderPipelines.Core.ShaderLibrary;
---assembly-defines=kcp2k;
---assembly-defines=Unity.Collections;
---assembly-defines=Unity.ProBuilder.Poly2Tri;
---assembly-defines=Mirror.Components;
---assembly-defines=Unity.TextMeshPro;
---assembly-defines=Mirror.Authenticators;
---assembly-defines=Mirror.Examples;
---assembly-defines=MemoryPack;
---assembly-defines=Unity.RenderPipelines.ShaderGraph.ShaderGraphLibrary;
+--assembly-defines=System.Xml.Linq;
 --assembly-defines=Telepathy;
---assembly-defines=FishNet.Runtime;
---assembly-defines=Unity.RenderPipelines.Universal.Runtime;
 --assembly-defines=Unity.Burst;
---assembly-defines=Unity.ProBuilder;
---assembly-defines=MirrorSimpleWebTransport;
---assembly-defines=Hathora.Demos.Shared;
---assembly-defines=Hathora.Cloud.Sdk;
---assembly-defines=Unity.RenderPipeline.Universal.ShaderLibrary;
+--assembly-defines=Unity.Burst.Unsafe;
 --assembly-defines=Unity.InputSystem;
 --assembly-defines=Unity.InputSystem.ForUI;
---assembly-defines=BayouSimpleWebTransport;
---assembly-defines=Unity.ProBuilder.KdTree;
 --assembly-defines=Unity.Mathematics;
---assembly-defines=HathoraClient;
---assembly-defines=Unity.RenderPipelines.Universal.Shaders;
---assembly-defines=IngameDebugConsole.Runtime;
---assembly-defines=Mirror;
---assembly-defines=Cinemachine;
---assembly-defines=HathoraServer;
---assembly-defines=Unity.Collections.LowLevel.ILSupport;
---assembly-defines=System.Runtime.CompilerServices.Unsafe;
---assembly-defines=FishNet.CodeAnalysis;
---assembly-defines=Moq;
---assembly-defines=System.Diagnostics.EventLog;
---assembly-defines=Common.Logging;
---assembly-defines=Unity.Burst.Unsafe;
---assembly-defines=log4net;
---assembly-defines=Newtonsoft.Json;
---assembly-defines=Castle.Core;
---assembly-defines=Accessibility;
---assembly-defines=System.Runtime;
---assembly-defines=System.Security.Principal.Windows;
---assembly-defines=netstandard;
---assembly-defines=Mono.Data.Sqlite;
---assembly-defines=Mono.Posix;
---assembly-defines=Mono.Security;
---assembly-defines=Mono.WebBrowser;
---assembly-defines=Novell.Directory.Ldap;
---assembly-defines=System.ComponentModel.Composition;
---assembly-defines=System.ComponentModel.DataAnnotations;
---assembly-defines=System.Configuration;
---assembly-defines=System.Core;
---assembly-defines=System.Data.DataSetExtensions;
---assembly-defines=System.Data;
---assembly-defines=System.Design;
---assembly-defines=System.DirectoryServices;
---assembly-defines=System.Drawing.Design;
---assembly-defines=System.Drawing;
---assembly-defines=System.EnterpriseServices;
---assembly-defines=System.IO.Compression.FileSystem;
---assembly-defines=System.IO.Compression;
---assembly-defines=System.Net.Http;
---assembly-defines=System.Numerics;
---assembly-defines=System.Runtime.Serialization.Formatters.Soap;
---assembly-defines=System.Runtime.Serialization;
---assembly-defines=System.Security;
---assembly-defines=System.ServiceModel.Internals;
---assembly-defines=System.Transactions;
---assembly-defines=System.Web.ApplicationServices;
---assembly-defines=System.Web.Services;
---assembly-defines=System.Web;
---assembly-defines=System.Windows.Forms;
---assembly-defines=System.Xml.Linq;
---assembly-defines=System.Xml;
---assembly-defines=System;
---assembly-defines=mscorlib;
---generate-link-xml=Temp\burst.link.xml
---temp-folder=D:\projects\unity\gonet_sample_games\dajimo\Temp\Burst
---key-folder=C:/Program Files/Unity/Hub/Editor/2022.3.12f1/Editor/Data/PlaybackEngines/LinuxStandaloneSupport
---decode-folder=D:\projects\unity\gonet_sample_games\dajimo\Library\Burst
---output=D:\projects\unity\gonet_sample_games\dajimo\Temp\BurstOutput\Data\Plugins\lib_burst_generated
---pdb-search-paths=Temp/ManagedSymbols/
-
---method=Unity.Jobs.IJobForExtensions+ForJobStruct`1[[UnityEngine.Rendering.Universal.ZBinningJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.ZBinningJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--77fc393cb521ac129b1392d4eb94d29a
---method=Unity.Jobs.IJobForExtensions+ForJobStruct`1[[UnityEngine.Rendering.Universal.TileRangeExpansionJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.TileRangeExpansionJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--adceb2156d08d59afc9749dc2521fd2b
---method=Unity.Jobs.IJobForExtensions+ForJobStruct`1[[UnityEngine.Rendering.Universal.TilingJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.TilingJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--a6f5259e22ed809ef3937424c4bd686d
---platform=Linux
---backend=burst-llvm-15
---target=X64_SSE2
---global-safety-checks-setting=Off
---meta-data-generation=False
---dump=Function
---float-precision=Standard
---target-framework=NetFramework
---assembly-defines=UnityEngine;
---assembly-defines=Assembly-CSharp;
---assembly-defines=FishNet.Demos;
---assembly-defines=Mirror.Transports;
---assembly-defines=Unity.RenderPipelines.Core.Runtime;
---assembly-defines=Unity.ProBuilder.Stl;
---assembly-defines=Unity.AI.Navigation;
---assembly-defines=FishNet.Example;
---assembly-defines=Unity.ProBuilder.Csg;
---assembly-defines=HathoraCommon;
---assembly-defines=Unity.RenderPipelines.Core.ShaderLibrary;
---assembly-defines=kcp2k;
---assembly-defines=Unity.Collections;
---assembly-defines=Unity.ProBuilder.Poly2Tri;
---assembly-defines=Mirror.Components;
---assembly-defines=Unity.TextMeshPro;
---assembly-defines=Mirror.Authenticators;
---assembly-defines=Mirror.Examples;
---assembly-defines=MemoryPack;
---assembly-defines=Unity.RenderPipelines.ShaderGraph.ShaderGraphLibrary;
---assembly-defines=Telepathy;
---assembly-defines=FishNet.Runtime;
---assembly-defines=Unity.RenderPipelines.Universal.Runtime;
---assembly-defines=Unity.Burst;
 --assembly-defines=Unity.ProBuilder;
---assembly-defines=MirrorSimpleWebTransport;
---assembly-defines=Hathora.Demos.Shared;
---assembly-defines=Hathora.Cloud.Sdk;
---assembly-defines=Unity.RenderPipeline.Universal.ShaderLibrary;
---assembly-defines=Unity.InputSystem;
---assembly-defines=Unity.InputSystem.ForUI;
---assembly-defines=BayouSimpleWebTransport;
 --assembly-defines=Unity.ProBuilder.KdTree;
---assembly-defines=Unity.Mathematics;
---assembly-defines=HathoraClient;
---assembly-defines=Unity.RenderPipelines.Universal.Shaders;
---assembly-defines=IngameDebugConsole.Runtime;
---assembly-defines=Mirror;
---assembly-defines=Cinemachine;
---assembly-defines=HathoraServer;
---assembly-defines=Unity.Collections.LowLevel.ILSupport;
---assembly-defines=System.Runtime.CompilerServices.Unsafe;
---assembly-defines=FishNet.CodeAnalysis;
---assembly-defines=Moq;
---assembly-defines=System.Diagnostics.EventLog;
---assembly-defines=Common.Logging;
---assembly-defines=Unity.Burst.Unsafe;
---assembly-defines=log4net;
---assembly-defines=Newtonsoft.Json;
---assembly-defines=Castle.Core;
---assembly-defines=Accessibility;
---assembly-defines=System.Runtime;
---assembly-defines=System.Security.Principal.Windows;
---assembly-defines=netstandard;
---assembly-defines=Mono.Data.Sqlite;
---assembly-defines=Mono.Posix;
---assembly-defines=Mono.Security;
---assembly-defines=Mono.WebBrowser;
---assembly-defines=Novell.Directory.Ldap;
---assembly-defines=System.ComponentModel.Composition;
---assembly-defines=System.ComponentModel.DataAnnotations;
---assembly-defines=System.Configuration;
---assembly-defines=System.Core;
---assembly-defines=System.Data.DataSetExtensions;
---assembly-defines=System.Data;
---assembly-defines=System.Design;
---assembly-defines=System.DirectoryServices;
---assembly-defines=System.Drawing.Design;
---assembly-defines=System.Drawing;
---assembly-defines=System.EnterpriseServices;
---assembly-defines=System.IO.Compression.FileSystem;
---assembly-defines=System.IO.Compression;
---assembly-defines=System.Net.Http;
---assembly-defines=System.Numerics;
---assembly-defines=System.Runtime.Serialization.Formatters.Soap;
---assembly-defines=System.Runtime.Serialization;
---assembly-defines=System.Security;
---assembly-defines=System.ServiceModel.Internals;
---assembly-defines=System.Transactions;
---assembly-defines=System.Web.ApplicationServices;
---assembly-defines=System.Web.Services;
---assembly-defines=System.Web;
---assembly-defines=System.Windows.Forms;
---assembly-defines=System.Xml.Linq;
---assembly-defines=System.Xml;
---assembly-defines=System;
---assembly-defines=mscorlib;
+--assembly-defines=Unity.ProBuilder.Poly2Tri;
+--assembly-defines=Unity.RenderPipeline.Universal.ShaderLibrary;
+--assembly-defines=Unity.RenderPipelines.Core.Runtime;
+--assembly-defines=Unity.RenderPipelines.Universal.Runtime;
+--assembly-defines=Unity.TextMeshPro;
+--assembly-defines=UnityEngine;
 --generate-link-xml=Temp\burst.link.xml
 --temp-folder=D:\projects\unity\gonet_sample_games\dajimo\Temp\Burst
 --key-folder=C:/Program Files/Unity/Hub/Editor/2022.3.12f1/Editor/Data/PlaybackEngines/LinuxStandaloneSupport
@@ -316,123 +65,214 @@ Library: D:\projects\unity\gonet_sample_games\dajimo\Temp\BurstOutput\Data\Plugi
 --pdb-search-paths=Temp/ManagedSymbols/
 
 --method=Unity.Burst.BurstCompiler+BurstCompilerHelper, Unity.Burst, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::IsBurstEnabled()--8c2be93e18276203cbd918daa2748a10
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[Unity.Collections.LowLevel.Unsafe.UnsafeHashMapDisposeJob, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(Unity.Collections.LowLevel.Unsafe.UnsafeHashMapDisposeJob&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--82b0ba09e7cb740f2e20482d3814830b
---method=Unity.Collections.xxHash3, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Hash64Long(System.Byte*, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.Byte*, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.Int64, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.Byte*, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--93df17b7366cd622dfa5ea2d3c75cf0b
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[Unity.Collections.NativeListDisposeJob, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(Unity.Collections.NativeListDisposeJob&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--4a1dc7df3f09b836e86a41d0d8fb4229
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[Unity.Collections.NativeReferenceDisposeJob, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(Unity.Collections.NativeReferenceDisposeJob&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--baf840f8150b604b0fd300ceb19dd50e
 --method=Unity.Burst.Intrinsics.X86, Unity.Burst, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::DoSetCSRTrampoline(System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--da352d92cabf024fc9986011d52a4537
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[Unity.Collections.LowLevel.Unsafe.UnsafeStream+ConstructJob, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(Unity.Collections.LowLevel.Unsafe.UnsafeStream+ConstructJob&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--164a9957f2c75e5d4b481d1ceff90393
 --method=UnityEngine.Jobs.IJobParallelForTransformExtensions+TransformParallelForLoopStruct`1[[UnityEngine.Rendering.Universal.DecalUpdateCachedSystem+UpdateTransformsJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.DecalUpdateCachedSystem+UpdateTransformsJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--670478f3fb3f285eeace534fbe61a03e
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[Unity.Collections.NativeQueueDisposeJob, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(Unity.Collections.NativeQueueDisposeJob&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--68a8ea65a4f1ea752d1138be3be73a9a
---method=Unity.Collections.xxHash3, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Hash128Long(System.Byte*, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.Byte*, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.Int64, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.Byte*, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Mathematics.uint4&, Unity.Mathematics, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null)--f7daf29273ab2f86d86c27c3a1d6eeb5
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[Unity.Collections.LowLevel.Unsafe.UnsafeStream+ConstructJobList, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(Unity.Collections.LowLevel.Unsafe.UnsafeStream+ConstructJobList&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--428d454056b9288c93f4435d6e6f7fda
 --method=Unity.Jobs.IJobForExtensions+ForJobStruct`1[[UnityEngine.Rendering.Universal.ReflectionProbeMinMaxZJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.ReflectionProbeMinMaxZJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--fbc079948c97a98cd097eb9cc996cc4a
---method=Unity.Collections.RewindableAllocator, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Try(System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Collections.AllocatorManager+Block&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null)--cf20d690c33ab495d44c548cd6a31428
 --method=Unity.Jobs.IJobExtensions+JobStruct`1[[UnityEngine.Rendering.Universal.DecalCreateDrawCallSystem+DrawCallJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.DecalCreateDrawCallSystem+DrawCallJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--aa309157da5950aa53ed6075709e6e40
---method=Unity.Collections.AllocatorManager+SlabAllocator, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Try(System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Collections.AllocatorManager+Block&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null)--2434a4c10d01dbab5e7438b2b580d1d1
---method=Unity.Collections.AllocatorManager+StackAllocator, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Try(System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Collections.AllocatorManager+Block&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null)--478bf3abafa12cba2083fb45bca79b9c
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[Unity.Collections.LowLevel.Unsafe.UnsafeHashMapDataDisposeJob, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(Unity.Collections.LowLevel.Unsafe.UnsafeHashMapDataDisposeJob&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--2ef0a503423574beae197ba4b01ed0be
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[Unity.Collections.NativeStream+ConstructJobList, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(Unity.Collections.NativeStream+ConstructJobList&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--959783104064e8c81fba5d33d94ead01
 --method=Unity.Jobs.IJobForExtensions+ForJobStruct`1[[UnityEngine.Rendering.Universal.LightMinMaxZJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.LightMinMaxZJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--2230a143748f5ecbc3a89a75bf0ad747
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[Unity.Collections.LowLevel.Unsafe.UnsafeStream+DisposeJob, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(Unity.Collections.LowLevel.Unsafe.UnsafeStream+DisposeJob&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--ca60ab232d19a9f4380a530fa0d222cf
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[Unity.Collections.LowLevel.Unsafe.UnsafeDisposeJob, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(Unity.Collections.LowLevel.Unsafe.UnsafeDisposeJob&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--276b96e48754d7f5ba865bd7f5b37c11
 --method=Unity.Burst.Intrinsics.X86, Unity.Burst, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::DoGetCSRTrampoline()--89425a97f3f500fa810ad03f0c382542
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[Unity.Collections.NativeStream+ConstructJob, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(Unity.Collections.NativeStream+ConstructJob&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--b78f808503c8b5fe97a83e833bd5871d
+--platform=Linux
+--backend=burst-llvm-15
+--target=X64_SSE2
+--global-safety-checks-setting=Off
+--disable-safety-checks
+--meta-data-generation=False
+--dump=Function
+--float-precision=Standard
+--target-framework=NetFramework
+--float-mode=Fast
+--assembly-defines=Assembly-CSharp;
+--assembly-defines=BayouSimpleWebTransport;
+--assembly-defines=Cinemachine;
+--assembly-defines=FishNet.Demos;
+--assembly-defines=FishNet.Example;
+--assembly-defines=FishNet.Runtime;
+--assembly-defines=Hathora.Cloud.Sdk;
+--assembly-defines=Hathora.Demos.Shared;
+--assembly-defines=HathoraClient;
+--assembly-defines=HathoraCommon;
+--assembly-defines=HathoraServer;
+--assembly-defines=IngameDebugConsole.Runtime;
+--assembly-defines=kcp2k;
+--assembly-defines=log4net;
+--assembly-defines=MemoryPack;
+--assembly-defines=Mirror.Authenticators;
+--assembly-defines=Mirror.Components;
+--assembly-defines=Mirror;
+--assembly-defines=Mirror.Examples;
+--assembly-defines=Mirror.Transports;
+--assembly-defines=MirrorSimpleWebTransport;
+--assembly-defines=Mono.Security;
+--assembly-defines=mscorlib;
+--assembly-defines=Newtonsoft.Json;
+--assembly-defines=System.Configuration;
+--assembly-defines=System.Core;
+--assembly-defines=System.Data;
+--assembly-defines=System;
+--assembly-defines=System.IO.Compression;
+--assembly-defines=System.Net.Http;
+--assembly-defines=System.Numerics;
+--assembly-defines=System.Runtime.CompilerServices.Unsafe;
+--assembly-defines=System.Runtime.Serialization;
+--assembly-defines=System.Web;
+--assembly-defines=System.Xml;
+--assembly-defines=System.Xml.Linq;
+--assembly-defines=Telepathy;
+--assembly-defines=Unity.Burst;
+--assembly-defines=Unity.Burst.Unsafe;
+--assembly-defines=Unity.InputSystem;
+--assembly-defines=Unity.InputSystem.ForUI;
+--assembly-defines=Unity.Mathematics;
+--assembly-defines=Unity.ProBuilder;
+--assembly-defines=Unity.ProBuilder.KdTree;
+--assembly-defines=Unity.ProBuilder.Poly2Tri;
+--assembly-defines=Unity.RenderPipeline.Universal.ShaderLibrary;
+--assembly-defines=Unity.RenderPipelines.Core.Runtime;
+--assembly-defines=Unity.RenderPipelines.Universal.Runtime;
+--assembly-defines=Unity.TextMeshPro;
+--assembly-defines=UnityEngine;
+--generate-link-xml=Temp\burst.link.xml
+--temp-folder=D:\projects\unity\gonet_sample_games\dajimo\Temp\Burst
+--key-folder=C:/Program Files/Unity/Hub/Editor/2022.3.12f1/Editor/Data/PlaybackEngines/LinuxStandaloneSupport
+--decode-folder=D:\projects\unity\gonet_sample_games\dajimo\Library\Burst
+--output=D:\projects\unity\gonet_sample_games\dajimo\Temp\BurstOutput\Data\Plugins\lib_burst_generated
+--pdb-search-paths=Temp/ManagedSymbols/
+
+--method=Unity.Jobs.IJobForExtensions+ForJobStruct`1[[UnityEngine.Rendering.Universal.ZBinningJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.ZBinningJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--77fc393cb521ac129b1392d4eb94d29a
+--method=Unity.Jobs.IJobForExtensions+ForJobStruct`1[[UnityEngine.Rendering.Universal.TileRangeExpansionJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.TileRangeExpansionJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--adceb2156d08d59afc9749dc2521fd2b
+--method=Unity.Jobs.IJobForExtensions+ForJobStruct`1[[UnityEngine.Rendering.Universal.TilingJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.TilingJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--a6f5259e22ed809ef3937424c4bd686d
+--platform=Linux
+--backend=burst-llvm-15
+--target=X64_SSE2
+--global-safety-checks-setting=Off
+--meta-data-generation=False
+--dump=Function
+--float-precision=Standard
+--target-framework=NetFramework
+--assembly-defines=Assembly-CSharp;
+--assembly-defines=BayouSimpleWebTransport;
+--assembly-defines=Cinemachine;
+--assembly-defines=FishNet.Demos;
+--assembly-defines=FishNet.Example;
+--assembly-defines=FishNet.Runtime;
+--assembly-defines=Hathora.Cloud.Sdk;
+--assembly-defines=Hathora.Demos.Shared;
+--assembly-defines=HathoraClient;
+--assembly-defines=HathoraCommon;
+--assembly-defines=HathoraServer;
+--assembly-defines=IngameDebugConsole.Runtime;
+--assembly-defines=kcp2k;
+--assembly-defines=log4net;
+--assembly-defines=MemoryPack;
+--assembly-defines=Mirror.Authenticators;
+--assembly-defines=Mirror.Components;
+--assembly-defines=Mirror;
+--assembly-defines=Mirror.Examples;
+--assembly-defines=Mirror.Transports;
+--assembly-defines=MirrorSimpleWebTransport;
+--assembly-defines=Mono.Security;
+--assembly-defines=mscorlib;
+--assembly-defines=Newtonsoft.Json;
+--assembly-defines=System.Configuration;
+--assembly-defines=System.Core;
+--assembly-defines=System.Data;
+--assembly-defines=System;
+--assembly-defines=System.IO.Compression;
+--assembly-defines=System.Net.Http;
+--assembly-defines=System.Numerics;
+--assembly-defines=System.Runtime.CompilerServices.Unsafe;
+--assembly-defines=System.Runtime.Serialization;
+--assembly-defines=System.Web;
+--assembly-defines=System.Xml;
+--assembly-defines=System.Xml.Linq;
+--assembly-defines=Telepathy;
+--assembly-defines=Unity.Burst;
+--assembly-defines=Unity.Burst.Unsafe;
+--assembly-defines=Unity.InputSystem;
+--assembly-defines=Unity.InputSystem.ForUI;
+--assembly-defines=Unity.Mathematics;
+--assembly-defines=Unity.ProBuilder;
+--assembly-defines=Unity.ProBuilder.KdTree;
+--assembly-defines=Unity.ProBuilder.Poly2Tri;
+--assembly-defines=Unity.RenderPipeline.Universal.ShaderLibrary;
+--assembly-defines=Unity.RenderPipelines.Core.Runtime;
+--assembly-defines=Unity.RenderPipelines.Universal.Runtime;
+--assembly-defines=Unity.TextMeshPro;
+--assembly-defines=UnityEngine;
+--generate-link-xml=Temp\burst.link.xml
+--temp-folder=D:\projects\unity\gonet_sample_games\dajimo\Temp\Burst
+--key-folder=C:/Program Files/Unity/Hub/Editor/2022.3.12f1/Editor/Data/PlaybackEngines/LinuxStandaloneSupport
+--decode-folder=D:\projects\unity\gonet_sample_games\dajimo\Library\Burst
+--output=D:\projects\unity\gonet_sample_games\dajimo\Temp\BurstOutput\Data\Plugins\lib_burst_generated
+--pdb-search-paths=Temp/ManagedSymbols/
+
+--method=Unity.Burst.BurstCompiler+BurstCompilerHelper, Unity.Burst, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::IsBurstEnabled()--8c2be93e18276203cbd918daa2748a10
+--method=Unity.Burst.Intrinsics.X86, Unity.Burst, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::DoSetCSRTrampoline(System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--da352d92cabf024fc9986011d52a4537
+--method=UnityEngine.Jobs.IJobParallelForTransformExtensions+TransformParallelForLoopStruct`1[[UnityEngine.Rendering.Universal.DecalUpdateCachedSystem+UpdateTransformsJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.DecalUpdateCachedSystem+UpdateTransformsJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--670478f3fb3f285eeace534fbe61a03e
+--method=Unity.Jobs.IJobForExtensions+ForJobStruct`1[[UnityEngine.Rendering.Universal.ReflectionProbeMinMaxZJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.ReflectionProbeMinMaxZJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--fbc079948c97a98cd097eb9cc996cc4a
+--method=Unity.Jobs.IJobExtensions+JobStruct`1[[UnityEngine.Rendering.Universal.DecalCreateDrawCallSystem+DrawCallJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.DecalCreateDrawCallSystem+DrawCallJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--aa309157da5950aa53ed6075709e6e40
+--method=Unity.Jobs.IJobForExtensions+ForJobStruct`1[[UnityEngine.Rendering.Universal.LightMinMaxZJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.LightMinMaxZJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--2230a143748f5ecbc3a89a75bf0ad747
+--method=Unity.Burst.Intrinsics.X86, Unity.Burst, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::DoGetCSRTrampoline()--89425a97f3f500fa810ad03f0c382542
 --platform=Linux
 --backend=burst-llvm-15
 --target=AVX2
 --global-safety-checks-setting=Off
+--disable-safety-checks
 --meta-data-generation=False
 --dump=Function
 --float-precision=Standard
 --target-framework=NetFramework
---assembly-defines=UnityEngine;
+--float-mode=Fast
 --assembly-defines=Assembly-CSharp;
---assembly-defines=FishNet.Demos;
---assembly-defines=Mirror.Transports;
---assembly-defines=Unity.RenderPipelines.Core.Runtime;
---assembly-defines=Unity.ProBuilder.Stl;
---assembly-defines=Unity.AI.Navigation;
---assembly-defines=FishNet.Example;
---assembly-defines=Unity.ProBuilder.Csg;
---assembly-defines=HathoraCommon;
---assembly-defines=Unity.RenderPipelines.Core.ShaderLibrary;
---assembly-defines=kcp2k;
---assembly-defines=Unity.Collections;
---assembly-defines=Unity.ProBuilder.Poly2Tri;
---assembly-defines=Mirror.Components;
---assembly-defines=Unity.TextMeshPro;
---assembly-defines=Mirror.Authenticators;
---assembly-defines=Mirror.Examples;
---assembly-defines=MemoryPack;
---assembly-defines=Unity.RenderPipelines.ShaderGraph.ShaderGraphLibrary;
---assembly-defines=Telepathy;
---assembly-defines=FishNet.Runtime;
---assembly-defines=Unity.RenderPipelines.Universal.Runtime;
---assembly-defines=Unity.Burst;
---assembly-defines=Unity.ProBuilder;
---assembly-defines=MirrorSimpleWebTransport;
---assembly-defines=Hathora.Demos.Shared;
---assembly-defines=Hathora.Cloud.Sdk;
---assembly-defines=Unity.RenderPipeline.Universal.ShaderLibrary;
---assembly-defines=Unity.InputSystem;
---assembly-defines=Unity.InputSystem.ForUI;
 --assembly-defines=BayouSimpleWebTransport;
---assembly-defines=Unity.ProBuilder.KdTree;
---assembly-defines=Unity.Mathematics;
---assembly-defines=HathoraClient;
---assembly-defines=Unity.RenderPipelines.Universal.Shaders;
---assembly-defines=IngameDebugConsole.Runtime;
---assembly-defines=Mirror;
 --assembly-defines=Cinemachine;
+--assembly-defines=FishNet.Demos;
+--assembly-defines=FishNet.Example;
+--assembly-defines=FishNet.Runtime;
+--assembly-defines=Hathora.Cloud.Sdk;
+--assembly-defines=Hathora.Demos.Shared;
+--assembly-defines=HathoraClient;
+--assembly-defines=HathoraCommon;
 --assembly-defines=HathoraServer;
---assembly-defines=Unity.Collections.LowLevel.ILSupport;
---assembly-defines=System.Runtime.CompilerServices.Unsafe;
---assembly-defines=FishNet.CodeAnalysis;
---assembly-defines=Moq;
---assembly-defines=System.Diagnostics.EventLog;
---assembly-defines=Common.Logging;
---assembly-defines=Unity.Burst.Unsafe;
+--assembly-defines=IngameDebugConsole.Runtime;
+--assembly-defines=kcp2k;
 --assembly-defines=log4net;
---assembly-defines=Newtonsoft.Json;
---assembly-defines=Castle.Core;
---assembly-defines=Accessibility;
---assembly-defines=System.Runtime;
---assembly-defines=System.Security.Principal.Windows;
---assembly-defines=netstandard;
---assembly-defines=Mono.Data.Sqlite;
---assembly-defines=Mono.Posix;
+--assembly-defines=MemoryPack;
+--assembly-defines=Mirror.Authenticators;
+--assembly-defines=Mirror.Components;
+--assembly-defines=Mirror;
+--assembly-defines=Mirror.Examples;
+--assembly-defines=Mirror.Transports;
+--assembly-defines=MirrorSimpleWebTransport;
 --assembly-defines=Mono.Security;
---assembly-defines=Mono.WebBrowser;
---assembly-defines=Novell.Directory.Ldap;
---assembly-defines=System.ComponentModel.Composition;
---assembly-defines=System.ComponentModel.DataAnnotations;
+--assembly-defines=mscorlib;
+--assembly-defines=Newtonsoft.Json;
 --assembly-defines=System.Configuration;
 --assembly-defines=System.Core;
---assembly-defines=System.Data.DataSetExtensions;
 --assembly-defines=System.Data;
---assembly-defines=System.Design;
---assembly-defines=System.DirectoryServices;
---assembly-defines=System.Drawing.Design;
---assembly-defines=System.Drawing;
---assembly-defines=System.EnterpriseServices;
---assembly-defines=System.IO.Compression.FileSystem;
+--assembly-defines=System;
 --assembly-defines=System.IO.Compression;
 --assembly-defines=System.Net.Http;
 --assembly-defines=System.Numerics;
---assembly-defines=System.Runtime.Serialization.Formatters.Soap;
+--assembly-defines=System.Runtime.CompilerServices.Unsafe;
 --assembly-defines=System.Runtime.Serialization;
---assembly-defines=System.Security;
---assembly-defines=System.ServiceModel.Internals;
---assembly-defines=System.Transactions;
---assembly-defines=System.Web.ApplicationServices;
---assembly-defines=System.Web.Services;
 --assembly-defines=System.Web;
---assembly-defines=System.Windows.Forms;
---assembly-defines=System.Xml.Linq;
 --assembly-defines=System.Xml;
---assembly-defines=System;
---assembly-defines=mscorlib;
+--assembly-defines=System.Xml.Linq;
+--assembly-defines=Telepathy;
+--assembly-defines=Unity.Burst;
+--assembly-defines=Unity.Burst.Unsafe;
+--assembly-defines=Unity.InputSystem;
+--assembly-defines=Unity.InputSystem.ForUI;
+--assembly-defines=Unity.Mathematics;
+--assembly-defines=Unity.ProBuilder;
+--assembly-defines=Unity.ProBuilder.KdTree;
+--assembly-defines=Unity.ProBuilder.Poly2Tri;
+--assembly-defines=Unity.RenderPipeline.Universal.ShaderLibrary;
+--assembly-defines=Unity.RenderPipelines.Core.Runtime;
+--assembly-defines=Unity.RenderPipelines.Universal.Runtime;
+--assembly-defines=Unity.TextMeshPro;
+--assembly-defines=UnityEngine;
 --generate-link-xml=Temp\burst.link.xml
 --temp-folder=D:\projects\unity\gonet_sample_games\dajimo\Temp\Burst
 --key-folder=C:/Program Files/Unity/Hub/Editor/2022.3.12f1/Editor/Data/PlaybackEngines/LinuxStandaloneSupport
@@ -440,27 +280,7 @@ Library: D:\projects\unity\gonet_sample_games\dajimo\Temp\BurstOutput\Data\Plugi
 --output=D:\projects\unity\gonet_sample_games\dajimo\Temp\BurstOutput\Data\Plugins\lib_burst_generated
 --pdb-search-paths=Temp/ManagedSymbols/
 
---method=Unity.Burst.BurstCompiler+BurstCompilerHelper, Unity.Burst, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::IsBurstEnabled()--8c2be93e18276203cbd918daa2748a10
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[Unity.Collections.LowLevel.Unsafe.UnsafeHashMapDisposeJob, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(Unity.Collections.LowLevel.Unsafe.UnsafeHashMapDisposeJob&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--82b0ba09e7cb740f2e20482d3814830b
---method=Unity.Collections.xxHash3, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Hash64Long(System.Byte*, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.Byte*, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.Int64, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.Byte*, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--93df17b7366cd622dfa5ea2d3c75cf0b
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[Unity.Collections.NativeListDisposeJob, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(Unity.Collections.NativeListDisposeJob&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--4a1dc7df3f09b836e86a41d0d8fb4229
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[Unity.Collections.NativeReferenceDisposeJob, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(Unity.Collections.NativeReferenceDisposeJob&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--baf840f8150b604b0fd300ceb19dd50e
---method=Unity.Burst.Intrinsics.X86, Unity.Burst, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::DoSetCSRTrampoline(System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--da352d92cabf024fc9986011d52a4537
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[Unity.Collections.LowLevel.Unsafe.UnsafeStream+ConstructJob, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(Unity.Collections.LowLevel.Unsafe.UnsafeStream+ConstructJob&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--164a9957f2c75e5d4b481d1ceff90393
---method=UnityEngine.Jobs.IJobParallelForTransformExtensions+TransformParallelForLoopStruct`1[[UnityEngine.Rendering.Universal.DecalUpdateCachedSystem+UpdateTransformsJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.DecalUpdateCachedSystem+UpdateTransformsJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--670478f3fb3f285eeace534fbe61a03e
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[Unity.Collections.NativeQueueDisposeJob, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(Unity.Collections.NativeQueueDisposeJob&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--68a8ea65a4f1ea752d1138be3be73a9a
---method=Unity.Collections.xxHash3, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Hash128Long(System.Byte*, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.Byte*, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.Int64, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.Byte*, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Mathematics.uint4&, Unity.Mathematics, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null)--f7daf29273ab2f86d86c27c3a1d6eeb5
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[Unity.Collections.LowLevel.Unsafe.UnsafeStream+ConstructJobList, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(Unity.Collections.LowLevel.Unsafe.UnsafeStream+ConstructJobList&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--428d454056b9288c93f4435d6e6f7fda
---method=Unity.Jobs.IJobForExtensions+ForJobStruct`1[[UnityEngine.Rendering.Universal.ReflectionProbeMinMaxZJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.ReflectionProbeMinMaxZJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--fbc079948c97a98cd097eb9cc996cc4a
---method=Unity.Collections.RewindableAllocator, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Try(System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Collections.AllocatorManager+Block&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null)--cf20d690c33ab495d44c548cd6a31428
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[UnityEngine.Rendering.Universal.DecalCreateDrawCallSystem+DrawCallJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.DecalCreateDrawCallSystem+DrawCallJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--aa309157da5950aa53ed6075709e6e40
---method=Unity.Collections.AllocatorManager+SlabAllocator, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Try(System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Collections.AllocatorManager+Block&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null)--2434a4c10d01dbab5e7438b2b580d1d1
---method=Unity.Collections.AllocatorManager+StackAllocator, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Try(System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Collections.AllocatorManager+Block&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null)--478bf3abafa12cba2083fb45bca79b9c
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[Unity.Collections.LowLevel.Unsafe.UnsafeHashMapDataDisposeJob, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(Unity.Collections.LowLevel.Unsafe.UnsafeHashMapDataDisposeJob&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--2ef0a503423574beae197ba4b01ed0be
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[Unity.Collections.NativeStream+ConstructJobList, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(Unity.Collections.NativeStream+ConstructJobList&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--959783104064e8c81fba5d33d94ead01
---method=Unity.Jobs.IJobForExtensions+ForJobStruct`1[[UnityEngine.Rendering.Universal.LightMinMaxZJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.LightMinMaxZJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--2230a143748f5ecbc3a89a75bf0ad747
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[Unity.Collections.LowLevel.Unsafe.UnsafeStream+DisposeJob, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(Unity.Collections.LowLevel.Unsafe.UnsafeStream+DisposeJob&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--ca60ab232d19a9f4380a530fa0d222cf
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[Unity.Collections.LowLevel.Unsafe.UnsafeDisposeJob, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(Unity.Collections.LowLevel.Unsafe.UnsafeDisposeJob&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--276b96e48754d7f5ba865bd7f5b37c11
---method=Unity.Burst.Intrinsics.X86, Unity.Burst, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::DoGetCSRTrampoline()--89425a97f3f500fa810ad03f0c382542
---method=Unity.Jobs.IJobExtensions+JobStruct`1[[Unity.Collections.NativeStream+ConstructJob, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(Unity.Collections.NativeStream+ConstructJob&, Unity.Collections, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--b78f808503c8b5fe97a83e833bd5871d
+--method=Unity.Jobs.IJobForExtensions+ForJobStruct`1[[UnityEngine.Rendering.Universal.ZBinningJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.ZBinningJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--77fc393cb521ac129b1392d4eb94d29a
+--method=Unity.Jobs.IJobForExtensions+ForJobStruct`1[[UnityEngine.Rendering.Universal.TileRangeExpansionJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.TileRangeExpansionJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--adceb2156d08d59afc9749dc2521fd2b
+--method=Unity.Jobs.IJobForExtensions+ForJobStruct`1[[UnityEngine.Rendering.Universal.TilingJob, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null::Execute(UnityEngine.Rendering.Universal.TilingJob&, Unity.RenderPipelines.Universal.Runtime, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|System.IntPtr, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089|Unity.Jobs.LowLevel.Unsafe.JobRanges&, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null|System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089)--a6f5259e22ed809ef3937424c4bd686d
 
