@@ -56,17 +56,17 @@ MonoBehaviour:
       overwriteExistingDockerfile?
       False
 
-      
+
 
       Cleaning/creating build dir @ path: `D:\projects\unity\gonet_sample_games\dajimo\Build-Server`
       ...
 
-      
+
 
       Configuring scripting backend: IL2CPP
 
-      BUILDING
-      now (this may take a while), with opts:
+      BUILDING now (this
+      may take a while), with opts:
 
       ```
 
@@ -88,14 +88,14 @@ MonoBehaviour:
 
       ```
 
-      
+
 
       **BUILD SUCCESS: Succeeded**
 
-      Opening
-      build dir ...
+      Opening build dir
+      ...
 
-      
+
 
       result: Succeeded
 
@@ -106,10 +106,10 @@ MonoBehaviour:
 
       totalErrors: 5
 
-      
 
-      <color=#66B9A0>Completed</color>
-      1/25/2024 7:51 PM (in 1m:19s)
+
+      <color=#66B9A0>Completed</color> 1/25/2024
+      7:51 PM (in 1m:19s)
 
       BUILD DONE
 
@@ -122,4 +122,4 @@ MonoBehaviour:
       port: 40000
     _transportTypeIndex: 1
   _hathoraLobbyRoomOpts:
-    _hathoraRegionIndex: 0
+    _hathoraRegionIndex: 2

@@ -57,11 +57,13 @@ namespace GONet
         /// </summary>
         public IEnumerable<GONetParticipant> EnabledGONetParticipants => enabledGONetParticipants;
 
-        public static readonly string ServerIPAddress_Default = GONetMain.isServerOverride ? "0.0.0.0" : "xrr504.edge.hathora.dev";
-        public const int ServerPort_Default = 23427;
-
+        //const string ServerHostName_Hathora = "xrr504.edge.hathora.dev"; // seattle
+        const string ServerHostName_Hathora = "86d96a.edge.hathora.dev"; // washington dc
+        public static readonly string ServerIPAddress_Default = GONetMain.isServerOverride ? "0.0.0.0" : ServerHostName_Hathora;
         //public static readonly string ServerIPAddress_Default = GONetMain.isServerOverride ? "0.0.0.0" : "127.0.0.1";
-        //public const int ServerPort_Default = 40000;
+        
+        const int ServerPort_HathoraRoom = 36353;
+        public static readonly int ServerPort_Default = GONetMain.isServerOverride ? 40000 : ServerPort_HathoraRoom;
 
         public delegate void ServerConnectionInfoChanged(string serverIP, int serverPort);
         public static event ServerConnectionInfoChanged ActualServerConnectionInfoSet;

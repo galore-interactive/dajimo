@@ -4543,7 +4543,7 @@ MonoBehaviour:
       m_Calls: []
   m_text: 'SERVER: Hathora
 
-    US Seattle'
+    US Washington DC'
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -14465,8 +14465,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 930614429}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalRotation: {x: 0.37163898, y: 0.5844965, z: -0.34207097, w: 0.6350085}
+  m_LocalPosition: {x: -38.922745, y: 34.652668, z: 3.8090644}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
