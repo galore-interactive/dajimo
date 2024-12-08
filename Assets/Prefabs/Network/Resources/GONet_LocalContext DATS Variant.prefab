@@ -10,6 +10,11 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 813501420998215093, guid: 338c05f05b3eb634894468e022a5a11f,
         type: 3}
+      propertyPath: UnityGuid
+      value: 7b60e4ad4c307f94db833dba2b8cf1b3
+      objectReference: {fileID: 0}
+    - target: {fileID: 813501420998215093, guid: 338c05f05b3eb634894468e022a5a11f,
+        type: 3}
       propertyPath: codeGenerationId
       value: 3
       objectReference: {fileID: 0}

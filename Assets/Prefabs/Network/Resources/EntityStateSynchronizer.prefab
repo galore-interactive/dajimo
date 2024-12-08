@@ -45,7 +45,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7a90b92e03441514aba6c47a0110582a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  codeGenerationId: 2
+  UnityGuid: ef7d35ee8ad37f6419f9f8ec087236f0
   animatorSyncSupport:
     keys: []
     values: []
@@ -54,7 +54,7 @@ MonoBehaviour:
   ShouldHideDuringRemoteInstantiate: 0
   IsPositionSyncd: 1
   IsRotationSyncd: 0
-  designTimeLocation: project://Assets/Prefabs/Network/Resources/EntityStateSynchronizer.prefab
+  wasInstantiatedForce: 0
 --- !u!114 &1366690977833013688
 MonoBehaviour:
   m_ObjectHideFlags: 0

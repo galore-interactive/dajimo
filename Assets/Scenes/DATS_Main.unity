@@ -3956,7 +3956,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 'SERVER: <localhost>'
+  m_text: 'SERVER: us-east-1b'
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -3983,7 +3983,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 18.15
+  m_fontSize: 18.9
   m_fontSizeBase: 12
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -17167,7 +17167,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7a90b92e03441514aba6c47a0110582a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  codeGenerationId: 1
+  UnityGuid: 
   animatorSyncSupport:
     keys: []
     values: []
@@ -17176,7 +17176,7 @@ MonoBehaviour:
   ShouldHideDuringRemoteInstantiate: 0
   IsPositionSyncd: 0
   IsRotationSyncd: 0
-  designTimeLocation: scene://DATS_Main/NetworkController
+  wasInstantiatedForce: 0
 --- !u!114 &1143062654
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -29159,7 +29159,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7a90b92e03441514aba6c47a0110582a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  codeGenerationId: 1
+  UnityGuid: 
   animatorSyncSupport:
     keys: []
     values: []
@@ -29168,7 +29168,7 @@ MonoBehaviour:
   ShouldHideDuringRemoteInstantiate: 0
   IsPositionSyncd: 0
   IsRotationSyncd: 0
-  designTimeLocation: scene://DATS_Main/GONet_GlobalContext
+  wasInstantiatedForce: 0
 --- !u!114 &7504562498552118495
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -29186,6 +29186,8 @@ MonoBehaviour:
   gonetLocalPrefab: {fileID: 1079569552966249427, guid: 7b60e4ad4c307f94db833dba2b8cf1b3,
     type: 3}
   shouldAttemptAutoStartAsClient: 0
+  server: 
+  serverPort: 0
 --- !u!1001 &7665429820267407458
 PrefabInstance:
   m_ObjectHideFlags: 0

@@ -494,7 +494,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7a90b92e03441514aba6c47a0110582a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  codeGenerationId: 4
+  UnityGuid: 9741025335354d5419f3cb7824ac38d5
   animatorSyncSupport:
     keys: []
     values: []
@@ -503,7 +503,7 @@ MonoBehaviour:
   ShouldHideDuringRemoteInstantiate: 0
   IsPositionSyncd: 1
   IsRotationSyncd: 0
-  designTimeLocation: project://Assets/Prefabs/Player/Resources/PlayerFPS.prefab
+  wasInstantiatedForce: 0
 --- !u!1 &1324901785482759235
 GameObject:
   m_ObjectHideFlags: 0

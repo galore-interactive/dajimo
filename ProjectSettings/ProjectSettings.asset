@@ -103,7 +103,7 @@ PlayerSettings:
   xboxEnableFitness: 0
   visibleInBackground: 1
   allowFullscreenSwitch: 0
-  fullscreenMode: 3
+  fullscreenMode: 2
   xboxSpeechDB: 0
   xboxEnableHeadOrientation: 0
   xboxEnableGuest: 0
@@ -904,7 +904,7 @@ PlayerSettings:
     0: LOG_WARNING;LOG_ERROR;LOG_FATAL;LOG_DEBUG;LOG_INFO
     1: LOG_DEBUG;LOG_INFO;LOG_WARNING;LOG_ERROR;LOG_FATAL
     Server: 
-    Standalone: 
+    Standalone: LOG_DEBUG;LOG_WARNING;LOG_ERROR;LOG_FATAL;LOG_INFO
   additionalCompilerArguments:
     1: []
     Server: []
@@ -912,7 +912,7 @@ PlayerSettings:
   scriptingBackend:
     Android: 1
     Server: 1
-    Standalone: 0
+    Standalone: 1
   il2cppCompilerConfiguration:
     Standalone: 2
   il2cppCodeGeneration: {}
@@ -939,7 +939,7 @@ PlayerSettings:
   gcIncremental: 1
   gcWBarrierValidation: 0
   apiCompatibilityLevelPerPlatform:
-    Standalone: 3
+    Standalone: 6
   m_RenderingPath: 1
   m_MobileRenderingPath: 1
   metroPackageName: com.unity.template-starter-kit

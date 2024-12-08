@@ -1,6 +1,7 @@
 project://Assets/Code/GONetTesting/Resources/GONetTestObject.prefab
 project://Assets/GONet/Resources/GONet/GONet_GlobalContext.prefab
 project://Assets/GONet/Resources/GONet/GONet_LocalContext.prefab
+project://Assets/GONet/Sample/Projectile/Resources/AddGNP.prefab
 project://Assets/GONet/Sample/Projectile/Resources/CannonBall.prefab
 project://Assets/Prefabs/Drone/Resources/Drone.prefab
 project://Assets/Prefabs/Network/Resources/EntityStateSynchronizer.prefab

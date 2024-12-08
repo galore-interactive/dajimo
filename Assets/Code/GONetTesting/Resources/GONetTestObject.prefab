@@ -45,7 +45,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7a90b92e03441514aba6c47a0110582a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  codeGenerationId: 1
+  UnityGuid: a9933bc6928a2194e9ebab69909bdee2
   animatorSyncSupport:
     keys: []
     values: []
@@ -54,7 +54,7 @@ MonoBehaviour:
   ShouldHideDuringRemoteInstantiate: 1
   IsPositionSyncd: 1
   IsRotationSyncd: 1
-  designTimeLocation: project://Assets/Code/GONetTesting/Resources/GONetTestObject.prefab
+  wasInstantiatedForce: 0
 --- !u!114 &8553322314194982820
 MonoBehaviour:
   m_ObjectHideFlags: 0

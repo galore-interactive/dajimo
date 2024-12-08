@@ -120,7 +120,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7a90b92e03441514aba6c47a0110582a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  codeGenerationId: 1
+  UnityGuid: ed9beef088a267b498e61bf9ca4e8f47
   animatorSyncSupport:
     keys: []
     values: []
@@ -129,7 +129,7 @@ MonoBehaviour:
   ShouldHideDuringRemoteInstantiate: 0
   IsPositionSyncd: 1
   IsRotationSyncd: 1
-  designTimeLocation: project://Assets/Prefabs/Network/Resources/MannequinTarget.prefab
+  wasInstantiatedForce: 0
 --- !u!1 &6949887675749085617
 GameObject:
   m_ObjectHideFlags: 0
