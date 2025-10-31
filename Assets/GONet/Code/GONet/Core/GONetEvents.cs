@@ -34,7 +34,10 @@ namespace GONet
     }
 
     /// <summary>
-    /// Implement this to this indicates the information herein is only relevant while it is happening and while subscribers are notified and NOT to be passed along to newly connecting clients and can safely be skipped over during replay skip-ahead or fast-forward.
+    /// Implement this to indicate the information herein is only relevant while it is happening and while subscribers are notified and NOT to be passed along to newly connecting clients and can safely be skipped over during replay skip-ahead or fast-forward.
+    ///
+    /// POOLING COMPATIBILITY: Events implementing ITransientEvent are typically compatible with object pooling via ISelfReturnEvent,
+    /// as they are processed immediately and not stored for future use. This allows for efficient memory reuse patterns.
     /// </summary>
     public partial interface ITransientEvent : IGONetEvent
     {
@@ -51,7 +54,61 @@ namespace GONet
     }
 
     /// <summary>
-    /// Implement this for persistent events..opposite of extending <see cref="ITransientEvent"/> (see the comments there for more).
+    /// Implement this to indicate the information herein should be stored and sent to newly connecting clients.
+    /// These events are kept in GONet's persistentEventsThisSession collection for late-joining client delivery.
+    ///
+    /// ⚠️  CRITICAL ARCHITECTURAL CONSTRAINT: NO OBJECT POOLING ALLOWED
+    ///
+    /// Classes implementing IPersistentEvent MUST NOT implement ISelfReturnEvent or use object pooling.
+    ///
+    /// WHY NO POOLING:
+    /// GONet stores persistent events BY REFERENCE in persistentEventsThisSession (GONet.cs:681) for
+    /// the entire session duration (minutes to hours). When late-joining clients connect, these exact
+    /// stored references are serialized and transmitted (see Server_SendClientPersistentEventsSinceStart
+    /// in GONet.cs:4355).
+    ///
+    /// WHAT HAPPENS IF YOU ADD POOLING (DON'T!):
+    ///   1. Event created: new PersistentEvent { Data = "ImportantState" }
+    ///   2. Stored by reference in persistentEventsThisSession
+    ///   3. Event.Return() called → data cleared: { Data = null }
+    ///   4. Pool reuses object for different event → overwrites: { Data = "DifferentState" }
+    ///   5. Late-joiner connects 30 minutes later
+    ///   6. Server serializes persistentEventsThisSession (includes corrupted reference!)
+    ///   7. Late-joiner receives WRONG/CORRUPTED data
+    ///   8. RESULT: Invisible bugs, state desync, crashes, game-breaking issues
+    ///
+    /// MEMORY COST vs SAFETY:
+    /// - Cost: ~48 bytes per event × 10-200 events = 1-10 KB per session
+    /// - Benefit: 100% guarantee of data integrity for late-joining clients
+    /// - Trade-off: Trivial memory overhead for critical correctness
+    ///
+    /// USAGE FREQUENCY:
+    /// - Persistent events: 1-10 per minute (setup, config, state changes)
+    /// - Transient events: 100-1000+ per second (movement, combat, frequent updates)
+    /// - Memory allocation cost for persistent events is negligible compared to transient event pooling savings
+    ///
+    /// EXAMPLES OF CORRECT IMPLEMENTATION (no ISelfReturnEvent):
+    /// - PersistentRpcEvent (see GONetRpcs.cs:912 for extensive rationale)
+    /// - PersistentRoutedRpcEvent (TargetRpc variant)
+    /// - InstantiateGONetParticipantEvent (spawn events)
+    /// - DespawnGONetParticipantEvent (despawn with cancellation logic)
+    /// - SceneLoadEvent (networked scene management)
+    ///
+    /// FOR END USERS:
+    /// When creating custom persistent events, simply create with 'new' operator (never pool).
+    /// The slight memory cost ensures your game state remains correct for all players.
+    ///
+    /// FOR FRAMEWORK DEVELOPERS:
+    /// This design constraint is architecturally required by GONet's persistence mechanism.
+    /// Do NOT attempt to "optimize" by adding pooling - the memory savings (~10 KB) are
+    /// trivial compared to the catastrophic risk of data corruption. This pattern has been
+    /// validated through production use and is fundamental to GONet's architecture.
+    ///
+    /// See also:
+    /// - GONet.cs:681 - persistentEventsThisSession storage (events stored by reference)
+    /// - GONet.cs:1595 - OnPersistentEvent_KeepTrack() (where events are added to storage)
+    /// - GONet.cs:4355 - Server_SendClientPersistentEventsSinceStart() (transmission to late-joiners)
+    /// - GONetRpcs.cs:912 - PersistentRpcEvent class (detailed pooling rationale with examples)
     /// </summary>
     public partial interface IPersistentEvent : IGONetEvent { }
 
@@ -62,9 +119,9 @@ namespace GONet
 
     /// <summary>
     /// This is something that would only apply to event class that implement <see cref="IPersistentEvent"/> that get queued up on server and sent to newly connecting clients.
-    /// Instances that implement this tell GONet to look for instances of the other events of type <see cref="OtherEventTypesCancelledOut"/> and see if they cancel one another out 
+    /// Instances that implement this tell GONet to look for instances of the other events of type <see cref="OtherEventTypesCancelledOut"/> and see if they cancel one another out
     /// so these messages can be removed from consideration in pairs as to not send these events anywhere.
-    /// Example: <see cref="InstantiateGONetParticipantEvent"/> is cancelled out by <see cref="DestroyGONetParticipantEvent"/>.
+    /// Example: <see cref="InstantiateGONetParticipantEvent"/> is cancelled out by <see cref="DespawnGONetParticipantEvent"/>.
     /// </summary>
     public interface ICancelOutOtherEvents
     {
@@ -121,6 +178,16 @@ namespace GONet
         public long OccurredAtElapsedTicks => throw new System.NotImplementedException();
 
         public uint GONetIdRawBatchStart { get; set; }
+    }
+
+    [MemoryPackable]
+    public partial class ClientRemotelyControlledGONetIdServerBatchRequestEvent : ITransientEvent
+    {
+        [MemoryPackIgnore]
+        public bool IsSingularRecipientOnly => true;
+
+        [MemoryPackIgnore]
+        public long OccurredAtElapsedTicks => throw new System.NotImplementedException();
     }
 
     /// <summary>
@@ -228,6 +295,45 @@ namespace GONet
         }
     }
 
+    /// <summary>
+    /// BANDWIDTH OPTIMIZATION: Encoding strategy for GameObject instance names.
+    /// Reduces typical spawn event size by 10-30 bytes per spawn.
+    /// </summary>
+    [Flags]
+    public enum InstanceNameEncoding : byte
+    {
+        /// <summary>
+        /// Use prefab's default name (no suffix).
+        /// Bandwidth: 0 bytes (just 1-byte flag).
+        /// Example: "CannonBall" → "CannonBall"
+        /// </summary>
+        UseDefaultName = 0,
+
+        /// <summary>
+        /// Append Unity's standard "(Clone)" suffix to prefab name.
+        /// Bandwidth: 0 bytes (just 1-byte flag).
+        /// Example: "CannonBall" → "CannonBall(Clone)"
+        /// Covers 80% of all spawns!
+        /// </summary>
+        UseClonePattern = 1,
+
+        /// <summary>
+        /// Append numeric suffix like "_1234" to name (encoded as ushort).
+        /// Bandwidth: 2 bytes (ushort suffix).
+        /// Example: "Player" → "Player_1234"
+        /// Can combine with UseClonePattern: "Player(Clone)_1234"
+        /// </summary>
+        HasNumericSuffix = 2,
+
+        /// <summary>
+        /// Full custom name string (backwards compatibility fallback).
+        /// Bandwidth: N bytes (full string length).
+        /// Example: "MyCustomObjectName_ABC"
+        /// Only used for truly custom names that don't fit other patterns.
+        /// </summary>
+        HasCustomName = 4
+    }
+
     [MemoryPackable]
     public partial class InstantiateGONetParticipantEvent : IPersistentEvent
     {
@@ -235,10 +341,49 @@ namespace GONet
         public long OccurredAtElapsedTicks { get; set; }
 
         /// <summary>
-        /// this is the information necessary to lookup the source <see cref="UnityEngine.GameObject"/> from which to use as the template in order to call <see cref="UnityEngine.Object.Instantiate(UnityEngine.Object)"/>.
-        /// TODO add the persisted int->string lookup table that is updated each time a new design time location is encountered (at design time...duh)..so this can be an int!
+        /// BANDWIDTH OPTIMIZATION: 16-bit index into DesignTimeMetadata.json instead of full string location.
+        /// Saves 38-78 bytes per spawn event (2 bytes vs 40-80 bytes).
+        /// ushort.MaxValue (65535) indicates invalid/legacy value - use <see cref="DesignTimeLocation"/> fallback.
         /// </summary>
-        public string DesignTimeLocation;
+        public ushort DesignTimeLocationIndex;
+
+        /// <summary>
+        /// BACKWARDS COMPATIBILITY: Legacy full string location.
+        /// Prefer using <see cref="DesignTimeLocationIndex"/> for bandwidth savings.
+        /// Use this property for compatibility and debugging.
+        /// When reading: If DesignTimeLocationIndex is valid (!= ushort.MaxValue), returns location from index lookup.
+        /// When writing: Also updates DesignTimeLocationIndex from location string.
+        /// </summary>
+        [MemoryPackIgnore]
+        public string DesignTimeLocation
+        {
+            get
+            {
+                // If index is valid, decode it to location string
+                if (DesignTimeLocationIndex != ushort.MaxValue)
+                {
+                    string location = GONetSpawnSupport_Runtime.GetDesignTimeLocationFromIndex(DesignTimeLocationIndex);
+                    if (!string.IsNullOrWhiteSpace(location))
+                        return location;
+                }
+
+                // Fallback to stored string (backwards compatibility for old events)
+                return _legacyDesignTimeLocation;
+            }
+            set
+            {
+                // Update both index and legacy string
+                _legacyDesignTimeLocation = value;
+                DesignTimeLocationIndex = GONetSpawnSupport_Runtime.GetDesignTimeLocationIndex(value);
+            }
+        }
+
+        /// <summary>
+        /// Internal backing field for backwards compatibility.
+        /// NOT SERIALIZED - only used for in-memory compatibility layer.
+        /// </summary>
+        [MemoryPackIgnore]
+        private string _legacyDesignTimeLocation;
 
         public uint GONetId;
 
@@ -248,7 +393,161 @@ namespace GONet
 
         public Quaternion Rotation;
 
-        public string InstanceName;
+        /// <summary>
+        /// BANDWIDTH OPTIMIZATION: Encoding flags for InstanceName (1 byte vs 10-50 bytes).
+        /// Determines how to reconstruct the GameObject name on remote machines.
+        /// </summary>
+        public InstanceNameEncoding InstanceNameEncodingFlags;
+
+        /// <summary>
+        /// BANDWIDTH OPTIMIZATION: Optional numeric suffix for name patterns like "Player_1234".
+        /// Only used when HasNumericSuffix flag is set (2 bytes vs 10+ bytes for full string).
+        /// </summary>
+        public ushort InstanceNameNumericSuffix;
+
+        /// <summary>
+        /// BANDWIDTH OPTIMIZATION: Custom instance name (only serialized when HasCustomName flag is set).
+        /// Most spawns (80%+) use UseClonePattern flag instead, saving 10-30 bytes per spawn.
+        /// </summary>
+        public string InstanceNameCustom;
+
+        /// <summary>
+        /// BACKWARDS COMPATIBILITY: Legacy full instance name string.
+        /// Prefer using InstanceNameEncodingFlags + InstanceNameNumericSuffix for bandwidth savings.
+        ///
+        /// When reading: Reconstructs name from encoding flags.
+        /// When writing: Analyzes name and sets appropriate encoding flags.
+        /// </summary>
+        [MemoryPackIgnore]
+        public string InstanceName
+        {
+            get
+            {
+                // Decode based on flags
+                if (InstanceNameEncodingFlags == InstanceNameEncoding.UseDefaultName)
+                {
+                    // Use prefab name from DesignTimeLocation
+                    return GetPrefabNameFromDesignTimeLocation(DesignTimeLocation);
+                }
+
+                if ((InstanceNameEncodingFlags & InstanceNameEncoding.HasCustomName) != 0)
+                {
+                    // Full custom name stored (backwards compatibility)
+                    return InstanceNameCustom ?? _legacyInstanceName;
+                }
+
+                // Start with prefab name
+                string baseName = GetPrefabNameFromDesignTimeLocation(DesignTimeLocation);
+
+                if ((InstanceNameEncodingFlags & InstanceNameEncoding.UseClonePattern) != 0)
+                {
+                    baseName += "(Clone)";
+                }
+
+                if ((InstanceNameEncodingFlags & InstanceNameEncoding.HasNumericSuffix) != 0)
+                {
+                    baseName += "_" + InstanceNameNumericSuffix;
+                }
+
+                return baseName;
+            }
+            set
+            {
+                _legacyInstanceName = value;
+
+                // Analyze name and encode efficiently
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    InstanceNameEncodingFlags = InstanceNameEncoding.UseDefaultName;
+                    InstanceNameNumericSuffix = 0;
+                    return;
+                }
+
+                string prefabName = GetPrefabNameFromDesignTimeLocation(DesignTimeLocation);
+
+                // Check for "(Clone)" pattern
+                bool hasClonePattern = value.EndsWith("(Clone)");
+                string nameWithoutClone = hasClonePattern ? value.Substring(0, value.Length - 7) : value;
+
+                // Check for numeric suffix pattern like "CannonBall_1234"
+                int lastUnderscore = nameWithoutClone.LastIndexOf('_');
+                if (lastUnderscore > 0 && lastUnderscore < nameWithoutClone.Length - 1)
+                {
+                    string basePart = nameWithoutClone.Substring(0, lastUnderscore);
+                    string suffixPart = nameWithoutClone.Substring(lastUnderscore + 1);
+
+                    if (ushort.TryParse(suffixPart, out ushort numericSuffix))
+                    {
+                        // Has numeric suffix pattern
+                        if (basePart == prefabName)
+                        {
+                            // Efficient encoding: "PrefabName_1234"
+                            InstanceNameEncodingFlags = InstanceNameEncoding.HasNumericSuffix;
+                            if (hasClonePattern)
+                                InstanceNameEncodingFlags |= InstanceNameEncoding.UseClonePattern;
+                            InstanceNameNumericSuffix = numericSuffix;
+                            return;
+                        }
+                    }
+                }
+
+                // Check if it's just "PrefabName(Clone)"
+                if (hasClonePattern && nameWithoutClone == prefabName)
+                {
+                    InstanceNameEncodingFlags = InstanceNameEncoding.UseClonePattern;
+                    InstanceNameNumericSuffix = 0;
+                    return;
+                }
+
+                // Check if it's just the prefab name
+                if (value == prefabName)
+                {
+                    InstanceNameEncodingFlags = InstanceNameEncoding.UseDefaultName;
+                    InstanceNameNumericSuffix = 0;
+                    return;
+                }
+
+                // Fall back to custom name (stores full string - backwards compatibility)
+                InstanceNameEncodingFlags = InstanceNameEncoding.HasCustomName;
+                InstanceNameNumericSuffix = 0;
+                InstanceNameCustom = value;
+                _legacyInstanceName = value;
+            }
+        }
+
+        /// <summary>
+        /// Internal backing field for custom instance names.
+        /// Only used when HasCustomName flag is set.
+        /// </summary>
+        [MemoryPackIgnore]
+        private string _legacyInstanceName;
+
+        /// <summary>
+        /// Helper to extract prefab name from DesignTimeLocation.
+        /// Example: "addressables://Assets/Prefabs/CannonBall.prefab" → "CannonBall"
+        /// </summary>
+        private static string GetPrefabNameFromDesignTimeLocation(string location)
+        {
+            if (string.IsNullOrWhiteSpace(location))
+                return string.Empty;
+
+            // Handle different location formats
+            // scene://SceneName/ObjectPath → extract last part
+            // resources://Assets/Resources/PrefabName.prefab → extract PrefabName
+            // addressables://Assets/Path/PrefabName.prefab → extract PrefabName
+
+            int lastSlash = location.LastIndexOf('/');
+            if (lastSlash < 0)
+                return location; // No slashes, use as-is
+
+            string fileName = location.Substring(lastSlash + 1);
+
+            // Remove .prefab extension if present
+            if (fileName.EndsWith(".prefab"))
+                fileName = fileName.Substring(0, fileName.Length - 7);
+
+            return fileName;
+        }
 
         public string ParentFullUniquePath;
 
@@ -256,12 +555,32 @@ namespace GONet
 
         public bool ImmediatelyRelinquishAuthorityToServer_AndTakeRemoteControlAuthority;
 
+        /// <summary>
+        /// Identifies which scene this GONetParticipant was spawned in.
+        /// <para>This is used for scene-based persistent event filtering to ensure late-joining clients
+        /// only receive spawns relevant to their currently loaded scenes.</para>
+        /// <para>Value is either the scene name from build settings or the addressable path for addressable scenes.</para>
+        /// </summary>
+        public string SceneIdentifier;
+
+        /// <summary>
+        /// Custom initialization data serialized from <see cref="IGONetSyncdBehaviourInitializer.Spawner_SerializeSpawnData"/>.
+        /// <para>This data is sent ONCE at spawn time and deserialized on receivers before Awake() completes.</para>
+        /// <para>Null if no <see cref="IGONetSyncdBehaviourInitializer"/> components are present on the spawned object.</para>
+        /// </summary>
+        public byte[] CustomSpawnData;
+
         internal static InstantiateGONetParticipantEvent Create(GONetParticipant gonetParticipant)
         {
             InstantiateGONetParticipantEvent @event = new InstantiateGONetParticipantEvent();
 
             @event.InstanceName = gonetParticipant.gameObject.name;
-            @event.DesignTimeLocation = gonetParticipant.DesignTimeLocation;
+
+            // CRITICAL: Force metadata lookup to bypass caching check
+            // This ensures we get the actual DesignTimeLocation even if metadata caching hasn't completed yet
+            // Without force=true, early spawns (before caching completes) would get empty DesignTimeLocation
+            @event.DesignTimeLocation = GONetSpawnSupport_Runtime.GetDesignTimeMetadata_Location(gonetParticipant, force: true);
+
             @event.ParentFullUniquePath = gonetParticipant.transform.parent == null ? string.Empty : HierarchyUtils.GetFullUniquePath(gonetParticipant.transform.parent.gameObject);
 
             @event.GONetId = gonetParticipant.GONetId;
@@ -272,7 +591,17 @@ namespace GONet
             @event.Position = gonetParticipant.transform.position;
             @event.Rotation = gonetParticipant.transform.rotation;
 
+            // CRITICAL: Objects with GONetSessionContext (GONetGlobal, GONetLocal) persist via DontDestroyOnLoad
+            // They must ALWAYS use "DontDestroyOnLoad" as SceneIdentifier, even if currently in a regular scene
+            // Otherwise SceneUnloadEvent will incorrectly cancel their spawn events when original scene unloads
+            @event.SceneIdentifier = gonetParticipant.GetComponent<GONetSessionContext>() != null
+                ? HierarchyUtils.DONT_DESTROY_ON_LOAD_SCENE
+                : GONetSceneManager.GetSceneIdentifier(gonetParticipant.gameObject);
+
             @event.OccurredAtElapsedTicks = default;
+
+            // Serialize custom spawn data from IGONetSpawnDataProvider components
+            @event.CustomSpawnData = SerializeCustomSpawnData(gonetParticipant);
 
             return @event;
         }
@@ -292,7 +621,17 @@ namespace GONet
             @event.Position = gonetParticipant.transform.position;
             @event.Rotation = gonetParticipant.transform.rotation;
 
+            // CRITICAL: Objects with GONetSessionContext (GONetGlobal, GONetLocal) persist via DontDestroyOnLoad
+            // They must ALWAYS use "DontDestroyOnLoad" as SceneIdentifier, even if currently in a regular scene
+            // Otherwise SceneUnloadEvent will incorrectly cancel their spawn events when original scene unloads
+            @event.SceneIdentifier = gonetParticipant.GetComponent<GONetSessionContext>() != null
+                ? HierarchyUtils.DONT_DESTROY_ON_LOAD_SCENE
+                : GONetSceneManager.GetSceneIdentifier(gonetParticipant.gameObject);
+
             @event.OccurredAtElapsedTicks = default;
+
+            // Serialize custom spawn data from IGONetSpawnDataProvider components
+            @event.CustomSpawnData = SerializeCustomSpawnData(gonetParticipant);
 
             return @event;
         }
@@ -302,7 +641,11 @@ namespace GONet
             InstantiateGONetParticipantEvent @event = new InstantiateGONetParticipantEvent();
 
             @event.InstanceName = gonetParticipant.gameObject.name;
-            @event.DesignTimeLocation = gonetParticipant.DesignTimeLocation;
+
+            // CRITICAL: Force metadata lookup to bypass caching check
+            // This ensures we get the actual DesignTimeLocation even if metadata caching hasn't completed yet
+            @event.DesignTimeLocation = GONetSpawnSupport_Runtime.GetDesignTimeMetadata_Location(gonetParticipant, force: true);
+
             @event.ParentFullUniquePath = gonetParticipant.transform.parent == null ? string.Empty : HierarchyUtils.GetFullUniquePath(gonetParticipant.transform.parent.gameObject);
 
             @event.GONetId = gonetParticipant.GONetId;
@@ -313,21 +656,102 @@ namespace GONet
             @event.Position = gonetParticipant.transform.position;
             @event.Rotation = gonetParticipant.transform.rotation;
 
+            // CRITICAL: Objects with GONetSessionContext (GONetGlobal, GONetLocal) persist via DontDestroyOnLoad
+            // They must ALWAYS use "DontDestroyOnLoad" as SceneIdentifier, even if currently in a regular scene
+            // Otherwise SceneUnloadEvent will incorrectly cancel their spawn events when original scene unloads
+            @event.SceneIdentifier = gonetParticipant.GetComponent<GONetSessionContext>() != null
+                ? HierarchyUtils.DONT_DESTROY_ON_LOAD_SCENE
+                : GONetSceneManager.GetSceneIdentifier(gonetParticipant.gameObject);
+
             @event.OccurredAtElapsedTicks = default;
 
+            // Serialize custom spawn data from IGONetSpawnDataProvider components
+            @event.CustomSpawnData = SerializeCustomSpawnData(gonetParticipant);
+
             return @event;
+        }
+
+        /// <summary>
+        /// Serializes custom initialization data from all <see cref="IGONetSyncdBehaviourInitializer"/> components on the given GONetParticipant.
+        /// </summary>
+        /// <param name="gonetParticipant">The participant being initialized</param>
+        /// <returns>Serialized initialization data byte array, or null if no initializers found</returns>
+        private static byte[] SerializeCustomSpawnData(GONetParticipant gonetParticipant)
+        {
+            // Find all IGONetSyncdBehaviourInitializer components on the same GameObject
+            IGONetSyncdBehaviourInitializer[] providers = gonetParticipant.GetComponents<IGONetSyncdBehaviourInitializer>();
+
+            if (providers == null || providers.Length == 0)
+            {
+                return null; // No spawn data providers
+            }
+
+            // Create builder for serialization
+            Utils.BitByBitByteArrayBuilder builder = Utils.BitByBitByteArrayBuilder.GetBuilder();
+
+            // Write provider count (for deserialization validation)
+            builder.WriteUInt((uint)providers.Length, 8); // Max 255 providers (overkill, but safe)
+
+            // Call each provider's serialization method
+            foreach (IGONetSyncdBehaviourInitializer provider in providers)
+            {
+                provider.Spawner_SerializeSpawnData(builder);
+            }
+
+            // Return serialized byte array (copy only the written bytes, not the full buffer)
+            int bytesWritten = builder.Length_WrittenBytes;
+            byte[] result = new byte[bytesWritten];
+            Array.Copy(builder.GetBuffer(), 0, result, 0, bytesWritten);
+            return result;
         }
     }
 
     /// <summary>
-    /// This is used internally to command all machines in the system to destroy the <see cref="GONetParticipant"/> and its <see cref="GameObject"/>.
+    /// Commands all machines to despawn a <see cref="GONetParticipant"/> and its <see cref="GameObject"/>.
+    /// <para>This event represents an **intentional gameplay despawn** (not scene lifecycle destruction).</para>
+    ///
+    /// <para><b>Networking Behavior:</b></para>
+    /// <list type="bullet">
+    /// <item><b>Network Propagation:</b> YES - Sent to all remote connections</item>
+    /// <item><b>Persistent Event:</b> YES - Added to persistent event history for late-joining clients</item>
+    /// <item><b>Cancels Spawn:</b> YES - Cancels corresponding <see cref="InstantiateGONetParticipantEvent"/> in persistent history</item>
+    /// </list>
+    ///
+    /// <para><b>When This Event is Published:</b></para>
+    /// <list type="bullet">
+    /// <item>Player/AI destroys an object through gameplay logic</item>
+    /// <item>Projectile hits target and is removed</item>
+    /// <item>Pickup item is collected and removed</item>
+    /// <item>Any intentional, non-scene-related object removal</item>
+    /// </list>
+    ///
+    /// <para><b>When This Event is NOT Published:</b></para>
+    /// <list type="bullet">
+    /// <item>Scene is unloading (objects destroyed as part of scene lifecycle)</item>
+    /// <item>Application is quitting</item>
+    /// <item>Object is in a DontDestroyOnLoad scene during scene transition</item>
+    /// </list>
+    ///
+    /// <para><b>Usage Example:</b></para>
+    /// <code>
+    /// // Subscribe to gameplay despawns only (not scene unloads)
+    /// GONetMain.EventBus.Subscribe&lt;DespawnGONetParticipantEvent&gt;(evt => {
+    ///     GONetLog.Info($"Object despawned through gameplay: {evt.GONetId}");
+    ///     // Handle gameplay-specific cleanup, scoring, etc.
+    /// });
+    /// </code>
+    ///
+    /// <para>See GONet scene management documentation for complete scene lifecycle details.</para>
     /// </summary>
     [MemoryPackable]
-    public partial class DestroyGONetParticipantEvent : IPersistentEvent, ICancelOutOtherEvents
+    public partial class DespawnGONetParticipantEvent : IPersistentEvent, ICancelOutOtherEvents
     {
         [MemoryPackIgnore]
         public long OccurredAtElapsedTicks { get; set; }
 
+        /// <summary>
+        /// The GONetId of the GONetParticipant being despawned.
+        /// </summary>
         public uint GONetId;
 
         static readonly Type[] otherEventsTypeCancelledOut = new[] {
@@ -344,7 +768,7 @@ namespace GONet
             if (otherEvent is InstantiateGONetParticipantEvent)
             {
                 InstantiateGONetParticipantEvent instantiationEvent = (InstantiateGONetParticipantEvent)otherEvent;
-                return instantiationEvent.GONetId != GONetParticipant.GONetId_Unset && 
+                return instantiationEvent.GONetId != GONetParticipant.GONetId_Unset &&
                     (instantiationEvent.GONetId == GONetId || instantiationEvent.GONetId == GONetMain.GetGONetIdAtInstantiation(GONetId));
             }
             else if (otherEvent is ValueMonitoringSupport_NewBaselineEvent)
@@ -531,6 +955,57 @@ namespace GONet
         }
     }
 
+    /// <summary>
+    /// Represents a single chunk of a large PersistentEvents_Bundle that has been split for transmission.
+    /// Used when persistent events exceed safe message size limits (> 12 KB).
+    /// The client reassembles all chunks before deserializing the complete bundle.
+    /// NOTE: Implements ITransientEvent since chunks are transport-layer constructs (not business logic)
+    /// that should only be sent to the specific recipient and not relayed/persisted.
+    /// </summary>
+    [MemoryPackable]
+    public partial class PersistentEvents_BundleChunk : ITransientEvent
+    {
+        [MemoryPackIgnore]
+        public long OccurredAtElapsedTicks { get; set; }
+
+        /// <summary>
+        /// Unique identifier for this multi-chunk message. All chunks with the same ChunkId belong together.
+        /// </summary>
+        public uint ChunkId { get; set; }
+
+        /// <summary>
+        /// Zero-based index of this chunk (0, 1, 2, ..., TotalChunks-1)
+        /// </summary>
+        public ushort ChunkIndex { get; set; }
+
+        /// <summary>
+        /// Total number of chunks in the complete message
+        /// </summary>
+        public ushort TotalChunks { get; set; }
+
+        /// <summary>
+        /// Raw serialized data for this chunk (max ~12.2 KB of data per chunk, resulting in ~12 KB total after wrapper overhead)
+        /// </summary>
+        public byte[] ChunkData { get; set; }
+
+        /// <summary>
+        /// Total size of the original uncompressed bundle (for validation and diagnostics)
+        /// </summary>
+        public int OriginalBundleSize { get; set; }
+
+        public PersistentEvents_BundleChunk() { }
+
+        [MemoryPackConstructor]
+        public PersistentEvents_BundleChunk(uint chunkId, ushort chunkIndex, ushort totalChunks, byte[] chunkData, int originalBundleSize)
+        {
+            ChunkId = chunkId;
+            ChunkIndex = chunkIndex;
+            TotalChunks = totalChunks;
+            ChunkData = chunkData;
+            OriginalBundleSize = originalBundleSize;
+        }
+    }
+
     [MemoryPackable]
     public partial class ClientTypeFlagsChangedEvent : ITransientEvent
     {
@@ -623,6 +1098,19 @@ namespace GONet
     /// <summary>
     /// Once this event is sent through <see cref="GONetEventBus.Publish{T}(T, uint?)"/>, it will automatically have <see cref="Return"/> called on it.
     /// At time of writing, this is to support (automatic) object pool usage for better memory/garbage/GC performance.
+    ///
+    /// IMPORTANT COMPATIBILITY CONSTRAINT: Events implementing ISelfReturnEvent should NOT also implement IPersistentEvent.
+    ///
+    /// REASON: GONet's persistence system stores direct references to persistent events for late-joining clients.
+    /// If a persistent event also implemented ISelfReturnEvent, its Return() method would clear the event data
+    /// after processing, corrupting the data when it's later sent to new clients.
+    ///
+    /// DESIGN PATTERN:
+    /// - Transient events (ITransientEvent) + ISelfReturnEvent = SAFE (immediate processing, pooling enabled)
+    /// - Persistent events (IPersistentEvent) + NO pooling = SAFE (stored references, data preserved)
+    /// - Persistent events + ISelfReturnEvent = DANGEROUS (data corruption for late-joining clients)
+    ///
+    /// This constraint ensures data integrity in GONet's event persistence mechanism.
     /// </summary>
     public interface ISelfReturnEvent
     {
@@ -787,4 +1275,238 @@ namespace GONet
             }
         }
     }
+
+    #region Scene Management Events
+
+    /// <summary>
+    /// Indicates which loading system to use for the scene.
+    /// </summary>
+    public enum SceneLoadType : byte
+    {
+        /// <summary>
+        /// Traditional: Scene in Build Settings, loaded by name/build index
+        /// </summary>
+        BuildSettings = 0,
+
+        /// <summary>
+        /// Modern: Scene loaded via Unity Addressables system
+        /// </summary>
+        Addressables = 1
+    }
+
+    /// <summary>
+    /// Persistent event for scene loading.
+    /// Server publishes this when loading a scene, clients receive and load accordingly.
+    /// Late-joining clients receive this event to sync scene state.
+    ///
+    /// <para><b>Cancellation Behavior (LoadSceneMode.Single only):</b></para>
+    /// <para>When loading a scene with LoadSceneMode.Single, this event cancels ALL previous SceneLoadEvent instances
+    /// from the persistent event history. This prevents late-joining clients from experiencing sequential scene loads
+    /// that already-connected clients never saw.</para>
+    ///
+    /// <para><b>Example Problem Without Cancellation:</b></para>
+    /// <list type="bullet">
+    /// <item>Server loads Scene A (Single mode) → SceneLoadEvent #1 persists</item>
+    /// <item>Server loads Scene B (Single mode) → SceneLoadEvent #2 persists</item>
+    /// <item>Server loads Scene C (Single mode) → SceneLoadEvent #3 persists</item>
+    /// <item>Late-joiner connects → Receives all 3 events → Loads A, then B, then C (confusion!)</item>
+    /// </list>
+    ///
+    /// <para><b>Solution With Cancellation:</b></para>
+    /// <list type="bullet">
+    /// <item>Server loads Scene A (Single mode) → SceneLoadEvent #1 persists</item>
+    /// <item>Server loads Scene B (Single mode) → SceneLoadEvent #2 persists, cancels #1</item>
+    /// <item>Server loads Scene C (Single mode) → SceneLoadEvent #3 persists, cancels #2</item>
+    /// <item>Late-joiner connects → Receives only event #3 → Loads C directly (correct!)</item>
+    /// </list>
+    ///
+    /// <para><b>Additive Mode Behavior:</b></para>
+    /// <para>LoadSceneMode.Additive events do NOT cancel previous loads, as additive scenes
+    /// are meant to stack on top of existing scenes.</para>
+    /// </summary>
+    [MemoryPackable]
+    public partial class SceneLoadEvent : IPersistentEvent, ICancelOutOtherEvents
+    {
+        public long OccurredAtElapsedTicks { get; set; }
+
+        /// <summary>
+        /// Scene name (for Build Settings) or addressable key (for Addressables)
+        /// </summary>
+        public string SceneName;
+
+        /// <summary>
+        /// Build index for scenes in Build Settings (fallback identifier)
+        /// </summary>
+        public int SceneBuildIndex = -1;
+
+        /// <summary>
+        /// Which loading system to use
+        /// </summary>
+        public SceneLoadType LoadType;
+
+        /// <summary>
+        /// Single or Additive loading mode
+        /// </summary>
+        public UnityEngine.SceneManagement.LoadSceneMode Mode;
+
+        /// <summary>
+        /// For Addressables: Whether to activate scene immediately after loading
+        /// </summary>
+        public bool ActivateOnLoad = true;
+
+        /// <summary>
+        /// For Addressables: Loading priority
+        /// </summary>
+        public int Priority = 100;
+
+        static readonly Type[] otherEventsTypeCancelledOut = new[] {
+            typeof(SceneLoadEvent)
+        };
+
+        [MemoryPackIgnore]
+        public Type[] OtherEventTypesCancelledOut => otherEventsTypeCancelledOut;
+
+        public bool DoesCancelOutOtherEvent(IGONetEvent otherEvent)
+        {
+            // Only LoadSceneMode.Single cancels previous scene loads
+            // Additive scenes should stack, not replace
+            if (Mode != UnityEngine.SceneManagement.LoadSceneMode.Single)
+            {
+                return false;
+            }
+
+            if (otherEvent is SceneLoadEvent previousLoadEvent)
+            {
+                // Cancel ALL previous SceneLoadEvent instances when loading in Single mode
+                // This ensures late-joiners only see the most recent scene state
+                return true;
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Persistent event for scene unloading.
+    /// Cancels out corresponding SceneLoadEvent for late-joining clients.
+    /// </summary>
+    [MemoryPackable]
+    public partial class SceneUnloadEvent : IPersistentEvent, ICancelOutOtherEvents
+    {
+        public long OccurredAtElapsedTicks { get; set; }
+
+        /// <summary>
+        /// Scene name or addressable key to unload
+        /// </summary>
+        public string SceneName;
+
+        /// <summary>
+        /// Build index for fallback identification
+        /// </summary>
+        public int SceneBuildIndex = -1;
+
+        /// <summary>
+        /// Which loading system was used
+        /// </summary>
+        public SceneLoadType LoadType;
+
+        static readonly Type[] otherEventsTypeCancelledOut = new[] {
+            typeof(SceneLoadEvent),
+            typeof(InstantiateGONetParticipantEvent),  // CRITICAL: Also cancel spawns from unloaded scenes
+            typeof(ValueMonitoringSupport_NewBaselineEvent),  // CRITICAL: Also cancel value events for destroyed objects
+            typeof(ValueMonitoringSupport_BaselineExpiredEvent)  // CRITICAL: Also cancel expired baseline events
+        };
+
+        [MemoryPackIgnore]
+        public Type[] OtherEventTypesCancelledOut => otherEventsTypeCancelledOut;
+
+        public bool DoesCancelOutOtherEvent(IGONetEvent otherEvent)
+        {
+            if (otherEvent is SceneLoadEvent loadEvent)
+            {
+                // Cancel if same scene name
+                if (!string.IsNullOrEmpty(SceneName) && SceneName == loadEvent.SceneName)
+                    return true;
+
+                // Fallback: cancel if same build index (and both are build settings scenes)
+                if (SceneBuildIndex >= 0 &&
+                    SceneBuildIndex == loadEvent.SceneBuildIndex &&
+                    LoadType == SceneLoadType.BuildSettings &&
+                    loadEvent.LoadType == SceneLoadType.BuildSettings)
+                    return true;
+            }
+            else if (otherEvent is InstantiateGONetParticipantEvent spawnEvent)
+            {
+                // CRITICAL FIX: When scene unloads, remove ALL spawn events for objects that were in that scene
+                // WITHOUT removing DontDestroyOnLoad objects (they persist across scene changes!)
+                // Without this, late-joiners receive spawn events for non-existent objects from unloaded scenes
+
+                // CRITICAL: Never cancel spawns in DontDestroyOnLoad scene - these objects persist across ALL scene changes
+                // Examples: GONet_GlobalContext, GONet_LocalContext, player objects with AutoDontDestroyOnLoad=true
+                if (spawnEvent.SceneIdentifier == HierarchyUtils.DONT_DESTROY_ON_LOAD_SCENE)
+                {
+                    return false; // DontDestroyOnLoad objects are NEVER cancelled by scene unloads
+                }
+
+                // Cancel if spawn's scene matches the unloaded scene
+                if (!string.IsNullOrEmpty(SceneName) && SceneName == spawnEvent.SceneIdentifier)
+                    return true;
+
+                // Fallback: check by build index for build settings scenes
+                // Note: SceneIdentifier may be addressable path, so this only works for build settings scenes
+                if (SceneBuildIndex >= 0 && LoadType == SceneLoadType.BuildSettings)
+                {
+                    // Try to parse build index from SceneIdentifier if it's a build settings scene
+                    // SceneIdentifier format for build settings: scene name (or may match exactly)
+                    if (spawnEvent.SceneIdentifier == SceneName)
+                        return true;
+                }
+            }
+            else if (otherEvent is ValueMonitoringSupport_NewBaselineEvent baselineEvent)
+            {
+                // CRITICAL FIX: When scene unloads, also cancel value baseline events for objects in that scene
+                // Value events reference GONetIds - if the spawn for that GONetId is in the unloaded scene, cancel the value event
+                // This prevents "Unable to find GONetParticipant" errors for late-joiners
+
+                // We need to check if the GONetId belongs to an object in the unloaded scene
+                // Since we don't have direct scene info in baseline events, we rely on the spawn cancellation happening first
+                // The persistent event system will remove both spawn AND value events for the same GONetId
+                // For now, we can't directly cancel value events by scene - they get cancelled when the spawn is cancelled
+                // This is handled by the persistent event cancellation mechanism in GONet.cs OnPersistentEvent_KeepTrack
+                return false;  // Let the spawn cancellation handle it indirectly
+            }
+            else if (otherEvent is ValueMonitoringSupport_BaselineExpiredEvent expiredEvent)
+            {
+                // Same logic as NewBaselineEvent - rely on spawn cancellation
+                return false;  // Let the spawn cancellation handle it indirectly
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Transient event published by CLIENT when a scene finishes loading.
+    /// Server uses this to know when to send scene-defined object GONetId assignments.
+    /// This ensures late-joining clients have fully loaded the scene before receiving GONetIds.
+    /// </summary>
+    [MemoryPackable]
+    public partial class SceneLoadCompleteEvent : ITransientEvent
+    {
+        [MemoryPackIgnore]
+        public long OccurredAtElapsedTicks => throw new System.NotImplementedException();
+
+        /// <summary>
+        /// Name of the scene that finished loading
+        /// </summary>
+        public string SceneName;
+
+        /// <summary>
+        /// Load mode that was used (Single or Additive)
+        /// </summary>
+        public UnityEngine.SceneManagement.LoadSceneMode Mode;
+    }
+
+    #endregion
 }
+

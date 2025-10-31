@@ -14,7 +14,15 @@ public class PlayerCameraController : MonoBehaviour
     {
         _virtualCamera = GetComponent<CinemachineCamera>();
         _cinemachineCameraSwitcher = FindObjectOfType<CinemachineCameraSwitcher>();
-        _cameraShaker = new CinemachineCameraShaker(_virtualCamera.GetComponent<CinemachineBasicMultiChannelPerlin>());
+
+        // Cinemachine 3.x: GetComponent returns CinemachineComponentBase, need to get or add the noise component
+        var noiseComponent = _virtualCamera.GetComponent<CinemachineBasicMultiChannelPerlin>();
+        if (noiseComponent == null)
+        {
+            // Add the component if it doesn't exist
+            noiseComponent = _virtualCamera.gameObject.AddComponent<CinemachineBasicMultiChannelPerlin>();
+        }
+        _cameraShaker = new CinemachineCameraShaker(noiseComponent);
     }
 
     public void SetCameraTarget(Transform target)

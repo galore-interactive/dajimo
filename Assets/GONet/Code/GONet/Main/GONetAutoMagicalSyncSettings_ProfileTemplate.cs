@@ -1,4 +1,4 @@
-﻿using GONet.PluginAPI;
+using GONet.PluginAPI;
 using System;
 using TypeReferences;
 using UnityEngine;
@@ -98,6 +98,142 @@ namespace GONet
         [Tooltip("This is a very helpful READONLY readout of what the above quantization settings will yield for the resulting precision.\nThis value is the same unit of measure of whatever the source value being quantized represents.\nFor example: a component of a position would be meters, which is common and that's why we put the more useful millimeters conversion in parenthesis for convenience (in which case sub-millimeter precision is great).\n\nIMPORTANT: If there is a custom serializer associated with certain Value Type(s), it is possible these quantization settings are ignored (see 'Sync Value Type Serializer Overrides' section).")]
         public string QuantizationResultingPrecision;
 
+        #region Velocity Quantization Settings (NEW - Velocity Augmented Sync System)
+
+        /// <summary>
+        /// Enable velocity-augmented sync for this value. When enabled, GONet will alternate between sending
+        /// VALUE packets (quantized positions) and VELOCITY packets (rates of change) to eliminate sub-quantization jitter.
+        ///
+        /// IMPORTANT: Only enable for values that change smoothly and predictably (positions, rotations).
+        /// DO NOT enable for discrete/step-change values (health, ammo count, etc.).
+        ///
+        /// RECOMMENDED: Enable for Transform.position/rotation on moving objects for smoother interpolation.
+        /// </summary>
+        [Space(10)]
+        [Header("Velocity-Augmented Sync (Eliminates Sub-Quantization Jitter)")]
+        [Tooltip("Enable velocity-augmented sync to eliminate sub-quantization jitter on moving objects.\n\n" +
+                 "When enabled, GONet alternates between VALUE packets (positions) and VELOCITY packets (rates of change).\n\n" +
+                 "IMPORTANT: Only enable for smooth/predictable values (positions, rotations).\n" +
+                 "DO NOT enable for discrete values (health, ammo, etc.).\n\n" +
+                 "RECOMMENDED: Enable for Transform.position/rotation on moving objects.")]
+        public bool IsVelocityEligible = false;
+
+        /// <summary>
+        /// VELOCITY-AUGMENTED SYNC: If true, velocity quantization bounds are calculated automatically
+        /// from VALUE quantization settings. If false, uses manually configured VelocityQuantize* settings below.
+        ///
+        /// AUTO-CALCULATION (default, recommended):
+        /// - Calculates velocity bounds from VALUE precision / sync interval
+        /// - Ensures VELOCITY bundles are sent only for sub-quantization motion
+        /// - Bit count matches VALUE bit count for consistency
+        /// - VelocityQuantize* fields below are IGNORED when this is true
+        ///
+        /// MANUAL CONFIGURATION (advanced):
+        /// - Set to false to use custom VelocityQuantize* settings below
+        /// - Useful for fine-tuning bandwidth vs quality trade-offs
+        /// - Requires understanding of quantization math
+        ///
+        /// Default: true (auto-calculate)
+        /// </summary>
+        [Tooltip("AUTO-CALCULATE (default): Velocity bounds calculated from VALUE precision / sync interval.\n" +
+                 "VelocityQuantize* fields below are IGNORED when enabled.\n\n" +
+                 "MANUAL CONFIG (advanced): Uncheck to use custom VelocityQuantize* settings below.\n" +
+                 "Requires understanding of quantization math.")]
+        public bool AutoCalculateVelocityQuantization = true;
+
+        /// <summary>
+        /// Velocity/delta quantization lower bound. Used when alternating value/velocity packets enabled.
+        /// Represents expected minimum rate of change (units per second).
+        ///
+        /// Only applies when <see cref="IsVelocityEligible"/> is true.
+        ///
+        /// RECOMMENDED: Set to negative of expected maximum velocity (e.g., -20 for objects moving up to 20 units/sec)
+        /// </summary>
+        [Tooltip("Lower bound for velocity/delta quantization when alternating value/velocity packets enabled.\n" +
+                 "Represents expected minimum rate of change (units per second).\n\n" +
+                 "Only applies when 'Is Velocity Eligible' is enabled.\n\n" +
+                 "RECOMMENDED: Set to negative of expected maximum velocity\n" +
+                 "Example: -20 for objects moving up to 20 units/sec")]
+        public float VelocityQuantizeLowerBound = -20f;
+
+        /// <summary>
+        /// Velocity/delta quantization upper bound. Used when alternating value/velocity packets enabled.
+        /// Represents expected maximum rate of change (units per second).
+        ///
+        /// Only applies when <see cref="IsVelocityEligible"/> is true.
+        ///
+        /// RECOMMENDED: Set to expected maximum velocity (e.g., 20 for objects moving up to 20 units/sec)
+        /// </summary>
+        [Tooltip("Upper bound for velocity/delta quantization when alternating value/velocity packets enabled.\n" +
+                 "Represents expected maximum rate of change (units per second).\n\n" +
+                 "Only applies when 'Is Velocity Eligible' is enabled.\n\n" +
+                 "RECOMMENDED: Set to expected maximum velocity\n" +
+                 "Example: 20 for objects moving up to 20 units/sec")]
+        public float VelocityQuantizeUpperBound = 20f;
+
+        /// <summary>
+        /// Bit count for velocity quantization. Can often be lower than position bit count since velocity
+        /// range is typically smaller and more predictable than position range.
+        ///
+        /// Only applies when <see cref="IsVelocityEligible"/> is true.
+        ///
+        /// RECOMMENDED: 8-10 bits for most use cases (provides 0.039-0.156 units/sec resolution for ±20 units/sec range)
+        /// </summary>
+        [Tooltip("Bit count for velocity quantization. Can be lower than position bits since velocity range is typically smaller.\n\n" +
+                 "Only applies when 'Is Velocity Eligible' is enabled.\n\n" +
+                 "RECOMMENDED: 8-10 bits for most use cases\n" +
+                 "8 bits = 0.156 units/sec resolution (256 values)\n" +
+                 "10 bits = 0.039 units/sec resolution (1024 values)")]
+        [Range(1, 31)]
+        public byte VelocityQuantizeDownToBitCount = 10;
+
+        /// <summary>
+        /// VELOCITY-AUGMENTED SYNC: Maximum time without VALUE anchor (HYBRID ANCHORING STRATEGY).
+        /// Prevents drift accumulation from packet loss during VELOCITY-augmented sync.
+        ///
+        /// HOW IT WORKS (Two-Tier Strategy):
+        ///
+        /// PRIMARY - Quantization-Aware Anchoring (optimal):
+        /// - Monitors when actualValue ≈ quantizedValue (rotation aligns with quantization grid)
+        /// - Sends VALUE anchor at these moments (ZERO visual snap/jitter)
+        /// - Adaptive rate: slow motion = fewer anchors, fast motion = more anchors
+        ///
+        /// FALLBACK - Time-Based Anchoring (safety):
+        /// - If no quantization-aware anchor for N seconds → FORCE VALUE anchor
+        /// - Prevents unbounded drift accumulation (safety net)
+        /// - This setting controls the fallback interval
+        ///
+        /// CONFIGURATION:
+        /// - 0 (default): Use global setting from GONetGlobal.velocityAnchorIntervalSeconds
+        /// - >0: Custom max interval for this specific sync profile (overrides global)
+        ///
+        /// TUNING:
+        /// - Lower (0.5-1.0s): Tighter drift control, more fallback anchors
+        /// - Higher (2-5s): Rely more on quantization-aware anchors, tolerate more drift
+        ///
+        /// Only applies when <see cref="IsVelocityEligible"/> is true.
+        ///
+        /// Default: 0 (use global setting, typically 1.0s)
+        /// </summary>
+        [Tooltip("Maximum seconds without VALUE anchor during VELOCITY sync (FALLBACK for drift prevention).\n\n" +
+                 "HYBRID STRATEGY:\n" +
+                 "• PRIMARY: Quantization-aware anchors (clean boundaries, zero jitter)\n" +
+                 "• FALLBACK: Time-based anchor if primary doesn't fire (prevents drift)\n\n" +
+                 "0 = Use global setting (GONetGlobal.velocityAnchorIntervalSeconds)\n" +
+                 ">0 = Custom max interval for this profile\n\n" +
+                 "Only applies when 'Is Velocity Eligible' is enabled.\n\n" +
+                 "RECOMMENDED: Leave at 0 (use global default of 1.0s).")]
+        [Range(0f, 5.0f)]
+        public float VelocityAnchorIntervalSeconds = 0f;
+
+        /// <summary>
+        /// READONLY: Velocity quantization resulting precision (calculated from above settings)
+        /// </summary>
+        [Tooltip("READONLY: Velocity quantization precision (calculated from above settings)")]
+        public string VelocityQuantizationResultingPrecision;
+
+        #endregion
+
         /// <summary>
         /// Helps identify the order in which this single value change will be processed in a group of auto-magical value changes.
         /// Leave this alone for normal priority.
@@ -117,6 +253,63 @@ namespace GONet
         /// </summary>
         [Tooltip("GONet optimizes processing by using multiple threads (as possible) when processing value sync'ing.\nSome things just cannot be done outside the main Unity thread.\nTherefore, if you know for certain that the value to sync being decorated with this attribute cannot run outside unity main thread, set this to true and GONet will ensure it is so.")]
         public bool MustRunOnUnityMainThread = false;
+
+        /// <summary>
+        /// SERVER PHYSICS SYNC ONLY: How often to sync physics state (position/rotation from Rigidbody) for objects using this profile.
+        /// Only applies to GONetParticipants with Rigidbody components and IsRigidBodyOwnerOnlyControlled enabled.
+        ///
+        /// Value of 1 = sync every FixedUpdate (60 Hz at 0.0167s timestep)
+        /// Value of 2 = sync every 2nd FixedUpdate (30 Hz)
+        /// Value of 3 = sync every 3rd FixedUpdate (20 Hz)
+        /// Value of 4 = sync every 4th FixedUpdate (15 Hz)
+        ///
+        /// PERFORMANCE: Higher values reduce bandwidth and CPU overhead but increase interpolation lag on clients.
+        /// RECOMMENDED: 1 for fast-moving objects (projectiles), 2-3 for normal physics objects, 4 for slow/static objects.
+        /// </summary>
+        [Space(10)]
+        [Tooltip("SERVER PHYSICS SYNC: How often to sync physics state for Rigidbody objects using this profile.\n\n" +
+                 "1 = Every FixedUpdate (60 Hz) - Best for projectiles/fast objects\n" +
+                 "2 = Every 2nd FixedUpdate (30 Hz) - Good for normal physics\n" +
+                 "3 = Every 3rd FixedUpdate (20 Hz) - Balanced performance\n" +
+                 "4 = Every 4th FixedUpdate (15 Hz) - Best for slow/static objects\n\n" +
+                 "Only applies to GONetParticipants with IsRigidBodyOwnerOnlyControlled enabled.\n" +
+                 "Higher values reduce bandwidth but increase interpolation lag.")]
+        [Range(1, 4)]
+        public int PhysicsUpdateInterval = 1;
+
+        [Tooltip("EXPERIMENTAL CLIENT PHYSICS SNAP: Enable physics-based precision snapping for at-rest objects using this profile.\n\n" +
+                 "⚠️ IMPORTANT: ONLY applies to Transform.position and Transform.rotation sync profiles!\n" +
+                 "⚠️ DEFAULT: false (DISABLED - use Stage 2 smart at-rest value selection instead)\n\n" +
+                 "APPLIES TO:\n" +
+                 "• Transform.position sync profiles ONLY\n" +
+                 "• Transform.rotation sync profiles ONLY\n" +
+                 "• Physics objects (IsRigidBodyOwnerOnlyControlled=true) on non-authority clients\n" +
+                 "• Enabling this on other profiles (health, ammo, etc.) HAS NO EFFECT\n\n" +
+                 "WHAT IT DOES:\n" +
+                 "When at-rest messages are received for physics objects (Rigidbody), temporarily enables\n" +
+                 "physics for ONE FixedUpdate to snap objects from quantized positions (~0.95mm error)\n" +
+                 "to sub-millimeter precision using Unity's collision resolver.\n\n" +
+                 "WHY IT'S DISABLED BY DEFAULT:\n" +
+                 "• Stage 2 smart at-rest value selection (Oct 2025) solves visual snapping issue\n" +
+                 "  by keeping local extrapolated values when within one quantization step\n" +
+                 "• Physics snapping is now OVERKILL - adds complexity without significant benefit\n" +
+                 "• May cause unexpected physics interactions (unwanted impulses, collisions)\n" +
+                 "• Costs 1 FixedUpdate per object (performance overhead)\n\n" +
+                 "WHEN TO ENABLE (RARE):\n" +
+                 "• Testing/comparison with Stage 2 approach\n" +
+                 "• Games requiring sub-millimeter stacking precision (Jenga-style physics puzzles)\n" +
+                 "• Extreme quantization settings where Stage 2 thresholds aren't tight enough\n\n" +
+                 "GRANULAR CONTROL:\n" +
+                 "• Only applies to position/rotation values using THIS sync profile\n" +
+                 "• Cannonball position profile could have it enabled, player position disabled\n" +
+                 "• Physics snap triggers if position OR rotation's profile enables it\n\n" +
+                 "IMPLEMENTATION (commit cff066dd):\n" +
+                 "• GONetParticipant.TriggerPhysicsSnapToRest() - Temporarily sets isKinematic=false\n" +
+                 "• Three trigger points: late-joiner init, early-joiner blended, early-joiner non-blended\n" +
+                 "• Network bandwidth impact: ZERO (uses existing at-rest messages)\n\n" +
+                 "RECOMMENDATION: Leave disabled unless you have a specific need.\n\n" +
+                 "Default: false (disabled)")]
+        public bool EnablePhysicsSnapping = false;
 
         [Space(10)]
         [Tooltip("*If this is left empty, the GONet default serialization will be applied to any/all value types associated with this sync template/profile.\n*If this is populated, then any/all value types included herein will have its corresponding custom serializer applied when preparing to send over the network.\n*NOTE: The Custom Serializer Type needs to be public and implement GONet.IGONetAutoMagicalSync_CustomSerializer.\n*WARNING: Do NOT have multiple entries for the same GONet Value Type or else GONet will get confused.")]
@@ -145,6 +338,7 @@ namespace GONet
 
         private void UpdateResultingPrecision()
         {
+            // Position quantization precision
             if (QuantizeDownToBitCount == 0)
             {
                 QuantizationResultingPrecision = "<full precision - no quantization will occur>";
@@ -154,6 +348,18 @@ namespace GONet
                 float range = QuantizeUpperBound - QuantizeLowerBound;
                 float precision = range / (float)Math.Pow(2.0, QuantizeDownToBitCount);
                 QuantizationResultingPrecision = string.Concat(precision.ToString(), " (i.e., ", string.Format("{0:##,##0.###}", precision * 1000f), " millimeters)");
+            }
+
+            // Velocity quantization precision
+            if (VelocityQuantizeDownToBitCount == 0)
+            {
+                VelocityQuantizationResultingPrecision = "<full precision - no quantization will occur>";
+            }
+            else
+            {
+                float velocityRange = VelocityQuantizeUpperBound - VelocityQuantizeLowerBound;
+                float velocityPrecision = velocityRange / (float)Math.Pow(2.0, VelocityQuantizeDownToBitCount);
+                VelocityQuantizationResultingPrecision = string.Concat(velocityPrecision.ToString("F6"), " units/sec");
             }
         }
     }

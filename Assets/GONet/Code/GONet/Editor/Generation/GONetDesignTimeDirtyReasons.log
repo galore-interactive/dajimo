@@ -1,0 +1,12 @@
+2025-10-31 11:13:40: Likely GONetAutoMagicalSyncSettings_ProfileTemplate deleted: Assets/GONet/Resources/GONet/SyncSettingsProfiles/EntityStateSynchronizer_TargetEntityId.asset
+2025-10-31 11:14:17: GONetAutoMagicalSyncSettings_ProfileTemplate at 'Assets/GONet/Resources/GONet/SyncSettingsProfiles/_GONet_EntityState_NoInterpolated.asset' has changed member values in editor.
+2025-10-31 11:14:25: GONetAutoMagicalSyncSettings_ProfileTemplate at 'Assets/GONet/Resources/GONet/SyncSettingsProfiles/_GONet_EntityState_NoInterpolated.asset' has changed member values in editor.
+2025-10-31 11:14:25: GONetAutoMagicalSyncSettings_ProfileTemplate at 'Assets/GONet/Resources/GONet/SyncSettingsProfiles/_GONet_EntityState_NoInterpolated.asset' has changed member values in editor.
+2025-10-31 11:14:46: GONetAutoMagicalSyncSettings_ProfileTemplate at 'Assets/GONet/Resources/GONet/SyncSettingsProfiles/_GONet_EntityState_NoInterpolated.asset' has changed member values in editor.
+2025-10-31 11:14:47: GONetAutoMagicalSyncSettings_ProfileTemplate at 'Assets/GONet/Resources/GONet/SyncSettingsProfiles/_GONet_EntityState_NoInterpolated.asset' has changed member values in editor.
+2025-10-31 11:14:57: GONetAutoMagicalSyncSettings_ProfileTemplate at 'Assets/GONet/Resources/GONet/SyncSettingsProfiles/_GONet_EntityState_NoInterpolated.asset' has changed member values in editor.
+2025-10-31 11:15:16: GONetAutoMagicalSyncSettings_ProfileTemplate at 'Assets/GONet/Resources/GONet/SyncSettingsProfiles/TeamColor.asset' has changed member values in editor.
+2025-10-31 11:15:27: GONetAutoMagicalSyncSettings_ProfileTemplate at 'Assets/GONet/Resources/GONet/SyncSettingsProfiles/TeamColor.asset' has changed member values in editor.
+2025-10-31 11:15:34: GONetAutoMagicalSyncSettings_ProfileTemplate at 'Assets/GONet/Resources/GONet/SyncSettingsProfiles/_GONet_EntityState_NoInterpolated.asset' has changed member values in editor.
+2025-10-31 11:31:46: Important member data of a GONetParticipant has changed values in editor. Path:scene://DATS_Main/GONet_GlobalContext
+2025-10-31 11:31:46: GONetParticipant properties changed on GameObject: scene://DATS_Main/GONet_GlobalContext (Design-time only).

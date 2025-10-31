@@ -22,7 +22,7 @@ namespace GONet.Generation
                 string previous = location;
                 location = value;
                 GONetSpawnSupport_Runtime.ChangeLocation(previous, value, this);
-                GONetLog.Debug($"assignment genId: {codeGenerationId}, *location: {value}");
+                //GONetLog.Debug($"assignment genId: {codeGenerationId}, *location: {value}");
             }
         }
 
@@ -40,7 +40,36 @@ namespace GONet.Generation
             set
             {
                 codeGenerationId = value;
-                GONetLog.Debug($"assignment *genId: {value}, location: {location}");
+                //GONetLog.Debug($"assignment *genId: {value}, location: {location}");
+            }
+        }
+
+        /// <summary>
+        /// Gets the resource load type based on the location prefix.
+        /// Supports backwards compatibility: project:// and resources:// both map to Resources.
+        /// </summary>
+        public ResourceLoadType LoadType
+        {
+            get
+            {
+                if (Location.StartsWith(GONetSpawnSupport_Runtime.ADDRESSABLES_HIERARCHY_PREFIX))
+                    return ResourceLoadType.Addressables;
+                else
+                    return ResourceLoadType.Resources; // Both project:// and resources:// prefixes use Resources loading
+            }
+        }
+
+        /// <summary>
+        /// Gets the addressable key from the location (for addressables only)
+        /// </summary>
+        public string AddressableKey
+        {
+            get
+            {
+                if (Location.StartsWith(GONetSpawnSupport_Runtime.ADDRESSABLES_HIERARCHY_PREFIX))
+                    return Location.Substring(GONetSpawnSupport_Runtime.ADDRESSABLES_HIERARCHY_PREFIX.Length);
+                else
+                    return string.Empty;
             }
         }
 
@@ -73,12 +102,20 @@ namespace GONet.Generation
 
         public static implicit operator DesignTimeMetadata(string location)
         {
+            // IMPORTANT: If location is empty/null, GetDesignTimeMetadata will now return default
+            // This prevents the "TON CLEETLE!" error when trying to cache empty location strings
             DesignTimeMetadata metadata = GONetSpawnSupport_Runtime.GetDesignTimeMetadata(location);
-            metadata.Location = location;
+
+            // Only set Location if it's not empty (metadata will be default if location was empty)
+            if (!string.IsNullOrWhiteSpace(location) && metadata != default)
+            {
+                metadata.Location = location;
+            }
+
             return metadata;
         }
 
-        public static implicit operator string(DesignTimeMetadata metadata) => metadata.Location;
+        public static implicit operator string(DesignTimeMetadata metadata) => metadata?.Location ?? string.Empty;
 
         public static string GetFullUniquePathInScene(GONetParticipant gnpInScene)
         {
@@ -197,8 +234,46 @@ namespace GONet.Generation
     }
 
     [Serializable]
+    public enum ResourceLoadType : byte
+    {
+        Resources = 0,
+        Addressables = 1
+    }
+
+    [Serializable]
     public class DesignTimeMetadataLibrary
     {
         public DesignTimeMetadata[] Entries;
+
+        /// <summary>
+        /// Gets the 16-bit index for a given design time location.
+        /// This is used for bandwidth optimization in spawn events (2 bytes vs 40-80 bytes).
+        /// Returns ushort.MaxValue if location not found.
+        /// </summary>
+        public ushort GetIndexForLocation(string location)
+        {
+            if (Entries == null || string.IsNullOrWhiteSpace(location))
+                return ushort.MaxValue;
+
+            for (int i = 0; i < Entries.Length; i++)
+            {
+                if (Entries[i].Location == location)
+                    return (ushort)i;
+            }
+
+            return ushort.MaxValue;
+        }
+
+        /// <summary>
+        /// Gets the design time location for a given index.
+        /// Returns null if index is invalid.
+        /// </summary>
+        public string GetLocationForIndex(ushort index)
+        {
+            if (Entries == null || index >= Entries.Length || index == ushort.MaxValue)
+                return null;
+
+            return Entries[index].Location;
+        }
     }
 }

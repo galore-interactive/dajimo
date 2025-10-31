@@ -18,7 +18,9 @@ using NetcodeIO.NET;
 using ReliableNetcode;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
+using System.Net.Sockets;
 using GONetChannelId = System.Byte;
 
 namespace GONet
@@ -95,7 +97,7 @@ namespace GONet
 
         #endregion
 
-        protected GONetConnection()
+        protected GONetConnection(int maxReliableQueueSize = 2000) : base(maxReliableQueueSize)
         {
             ReceiveCallback = OnReceiveCallback;
         }
@@ -114,6 +116,44 @@ namespace GONet
         /// </summary>
         public void SendMessageOverChannel(byte[] messageBytes, int bytesUsedCount, GONetChannelId channelId)
         {
+            // CRITICAL SIZE VALIDATION: Prevent message overflow/corruption
+            // The transport layer has hard limits that cause silent corruption if exceeded
+            const int TRANSPORT_ABSOLUTE_MAX = 16 * 1024; // 16 KB - ReliableNetcode MaxPacketSize (16 fragments × 1024 bytes)
+            const int SAFE_RELIABLE_MAX = 12 * 1024;      // 12 KB - Safe size for reliable messages with overhead
+            const int PERFORMANCE_WARN_THRESHOLD = 10 * 1024; // 10 KB - Warn about large messages
+
+            GONetChannel channel = GONetChannel.ById(channelId);
+            bool isReliable = channel.QualityOfService == QosType.Reliable;
+
+            // Check BEFORE compression since we validate final transmitted size
+            if (bytesUsedCount > TRANSPORT_ABSOLUTE_MAX)
+            {
+                throw new System.InvalidOperationException(
+                    $"CRITICAL: Message size ({bytesUsedCount} bytes) exceeds transport maximum ({TRANSPORT_ABSOLUTE_MAX} bytes). " +
+                    $"Channel: {channelId}, Reliable: {isReliable}, Owner: {OwnerAuthorityId}. " +
+                    $"Messages larger than {TRANSPORT_ABSOLUTE_MAX} bytes cannot be sent and will cause corruption. " +
+                    $"If you need to send large data, consider: 1) Chunking into smaller messages, 2) Using alternative delivery (HTTP), " +
+                    $"3) Reducing data size through compression or optimization.");
+            }
+
+            if (isReliable && bytesUsedCount > SAFE_RELIABLE_MAX)
+            {
+                GONetLog.Warning(
+                    $"[PERFORMANCE] Large reliable message ({bytesUsedCount} bytes) approaching transport limits. " +
+                    $"Channel: {channelId}, Owner: {OwnerAuthorityId}. " +
+                    $"Recommended max for reliable: {SAFE_RELIABLE_MAX} bytes. " +
+                    $"Large reliable messages increase packet loss probability and may impact performance. " +
+                    $"Consider splitting into smaller messages.");
+            }
+            else if (bytesUsedCount > PERFORMANCE_WARN_THRESHOLD)
+            {
+                GONetLog.Info(
+                    $"[PERFORMANCE] Large message ({bytesUsedCount} bytes) detected. " +
+                    $"Channel: {channelId}, Reliable: {isReliable}, Owner: {OwnerAuthorityId}. " +
+                    $"If you frequently send messages > {PERFORMANCE_WARN_THRESHOLD} bytes, " +
+                    $"consider optimizing data size or implementing chunking.");
+            }
+
             int headerSize = sizeof(GONetChannelId) + sizeof(int);
             int bodySize_withHeader;
 
@@ -126,6 +166,15 @@ namespace GONet
                 GONetMain.AutoCompressEverything.Compress(messageBytes, (ushort)bytesUsedCount, out messageBytesCompressed, out messageBytesCompressedUsedCount);
                 messageBytes = messageBytesCompressed;
                 bytesUsedCount = messageBytesCompressedUsedCount;
+
+                // Re-validate after compression (compression could theoretically increase size in worst case)
+                if (bytesUsedCount > TRANSPORT_ABSOLUTE_MAX)
+                {
+                    throw new System.InvalidOperationException(
+                        $"CRITICAL: Message size after compression ({bytesUsedCount} bytes) exceeds transport maximum ({TRANSPORT_ABSOLUTE_MAX} bytes). " +
+                        $"Channel: {channelId}, Owner: {OwnerAuthorityId}. " +
+                        $"Compression increased message size beyond safe limits. Consider disabling compression for this message type.");
+                }
             }
 
             bodySize_withHeader = bytesUsedCount + headerSize;
@@ -136,8 +185,40 @@ namespace GONet
             Utils.BitConverter.GetBytes(bytesUsedCount, messageBytes_withHeader, sizeof(GONetChannelId));
             Buffer.BlockCopy(messageBytes, 0, messageBytes_withHeader, headerSize, bytesUsedCount);
 
-            GONetChannel channel = GONetChannel.ById(channelId);
-            base.SendMessage(messageBytes_withHeader, bodySize_withHeader, channel.QualityOfService); // IMPORTANT: this should be the ONLY call to this method in all of GONet! including user codebases!
+            try
+            {
+                base.SendMessage(messageBytes_withHeader, bodySize_withHeader, channel.QualityOfService); // IMPORTANT: this should be the ONLY call to this method in all of GONet! including user codebases!
+            }
+            catch (ReliableQueueExhaustedException ex)
+            {
+                // CRITICAL: Reliable message queue exhausted - message dropped
+                // This indicates severe network congestion or sustained high message rate
+                GONetLog.Error(
+                    $"[RELIABLE-QUEUE-EXHAUSTION] Reliable message queue exhausted and message DROPPED. " +
+                    $"Queue: {ex.CurrentQueueDepth}/{ex.MaxQueueSize} messages. " +
+                    $"Dropped message: {ex.DroppedMessageSize} bytes on channel {ex.ChannelId}. " +
+                    $"Connection: Authority {OwnerAuthorityId}, RTT: {RTTMilliseconds:F1}ms. " +
+                    $"\n\n" +
+                    $"WHAT THIS MEANS:\n" +
+                    $"• Reliable messages (spawns, RPCs, critical state) are being sent faster than network can deliver them\n" +
+                    $"• This is EXTREMELY RARE - requires sustained 100+ messages/sec + high packet loss + slow ACKs\n" +
+                    $"• The dropped message will NOT be delivered (spawn events, RPCs will fail)\n" +
+                    $"\n" +
+                    $"SOLUTIONS:\n" +
+                    $"1. Increase 'Max Reliable Message Queue Size' in GONetGlobal inspector (current: {ex.MaxQueueSize})\n" +
+                    $"   - For high-latency connections: Increase to 5000-10000\n" +
+                    $"   - For rapid spawning scenarios: Increase to 3000-5000\n" +
+                    $"2. Reduce message send rate:\n" +
+                    $"   - Batch spawn requests (spawn 10 objects every 0.1s instead of 100 instantly)\n" +
+                    $"   - Throttle RPC calls\n" +
+                    $"   - Use unreliable channels for non-critical data (position updates)\n" +
+                    $"3. Investigate network conditions:\n" +
+                    $"   - Check packet loss (current: {PacketLoss:F2}%)\n" +
+                    $"   - Check RTT/latency (current: {RTTMilliseconds:F1}ms)\n" +
+                    $"   - Consider network quality issues\n" +
+                    $"\n" +
+                    $"See: ReliableQueueExhaustedException documentation for detailed analysis.");
+            }
 
             { // memory management:
                 SerializationUtils.ReturnByteArray(messageBytes_withHeader);
@@ -197,7 +278,7 @@ namespace GONet
 
         public ClientState State => client.State;
 
-        public GONetConnection_ClientToServer(Client client) : base()
+        public GONetConnection_ClientToServer(Client client, int maxReliableQueueSize = 2000) : base(maxReliableQueueSize)
         {
             this.client = client;
 
@@ -268,19 +349,9 @@ namespace GONet
             }
 
             // Here, we're creating an array of endpoints that includes both IPv4 and IPv6 loopback addresses if the serverIP is a loopback address.
-            List<IPEndPoint> endpoints = new List<IPEndPoint>();
-
-            if (NetworkUtils.IsIPAddressOnLocalMachine(serverIP))
-            {
-                // Add both loopback addresses to handle special case where server will compare various addresses for validation
-                endpoints.Add(new IPEndPoint(IPAddress.IPv6Loopback, serverPort)); // put the most likely one to be used/operational one first to prevent unnecessary delays waiting for timeouts
-                endpoints.Add(new IPEndPoint(IPAddress.Loopback, serverPort));
-            }
-            else
-            {
-                // If not a loopback, just add the parsed or resolved address
-                endpoints.Add(mostRecentConnectInfo);
-            }
+            List<IPEndPoint> endpoints = NetworkUtils.BuildDualStackEndpointList(serverIP, serverPort);
+            endpoints.AddRange(client.P2pEndPoints);
+            //foreach (var e in endpoints) GONetLog.Debug($"{GetType().Name}.{nameof(Connect)} called. TOKEN ENTRY: {e}");
 
             byte[] connectToken = factory.GenerateConnectToken(
                 endpoints.ToArray(),
@@ -314,7 +385,9 @@ namespace GONet
 
         public bool IsConnectedToClient => remoteClient.Connected;
 
-        public GONetConnection_ServerToClient(RemoteClient remoteClient) : base()
+        public EndPoint RemoteClientEndPoint => remoteClient.RemoteEndpoint;
+
+        public GONetConnection_ServerToClient(RemoteClient remoteClient, int maxReliableQueueSize = 2000) : base(maxReliableQueueSize)
         {
             this.remoteClient = remoteClient;
 

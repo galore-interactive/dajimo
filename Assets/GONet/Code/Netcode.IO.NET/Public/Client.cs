@@ -244,7 +244,7 @@ namespace NetcodeIO.NET
 		/// </summary>
 		public void Connect(byte[] connectToken)
 		{
-			Connect(connectToken, true);
+			Connect(connectToken, autoTick: true);
 		}
 
 		internal void Connect(byte[] connectToken, bool autoTick)
@@ -372,7 +372,7 @@ namespace NetcodeIO.NET
 			Datagram datagram;
             int countAvailable = socket == null ? 0 : socket.AvailableToReadCount;
             int countProcessed = 0;
-			while (countProcessed < countAvailable && socket.Read(out datagram))
+			while (countProcessed < countAvailable && socket != null && socket.Read(out datagram))
 			{
 				processDatagram(datagram);
 				datagram.Release();
@@ -446,7 +446,7 @@ namespace NetcodeIO.NET
 
 		private void processDatagram(Datagram datagram)
 		{
-			if (!MiscUtils.AreEndPointsEqual(datagram.sender, currentServerEndpoint))
+			if (!GONet.Utils.NetworkUtils.AreSameAddressFamilyOrMapped(datagram.sender, currentServerEndpoint))
 				return;
 
 			using (var reader = ByteArrayReaderWriter.Get(datagram.payload))
@@ -727,11 +727,18 @@ namespace NetcodeIO.NET
 			BufferPool.ReturnBuffer(packetBuffer);
 		}
 
-		#endregion
+        #endregion
 
-		#region Util methods
+		internal IEnumerable<IPEndPoint> P2pEndPoints => p2pEndPoints;
+        private readonly HashSet<IPEndPoint> p2pEndPoints = new();
+        internal void AddP2pEndPoint(IPEndPoint p2pEndPoint)
+        {
+            p2pEndPoints.Add(p2pEndPoint);
+        }
 
-		private void sendPacket(NetcodePacketHeader packetHeader, byte[] packetData, int packetDataLen, byte[] key)
+        #region Util methods
+
+        private void sendPacket(NetcodePacketHeader packetHeader, byte[] packetData, int packetDataLen, byte[] key)
 		{
 			// assign a sequence number to this packet
 			packetHeader.SequenceNumber = this.nextPacketSequence++;
@@ -785,6 +792,6 @@ namespace NetcodeIO.NET
 			return replayProtection.AlreadyReceived(packetHeader.SequenceNumber);
 		}
 
-		#endregion
-	}
+        #endregion
+    }
 }

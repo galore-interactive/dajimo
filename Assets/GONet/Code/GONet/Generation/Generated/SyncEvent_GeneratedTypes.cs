@@ -9,8 +9,8 @@ namespace GONet
 		SyncEvent_GONetParticipant_RemotelyControlledByAuthorityId = 4,
 		SyncEvent_Transform_rotation = 5,
 		SyncEvent_Transform_position = 6,
-		SyncEvent_CircularMotion_NettyWorkedFloat = 7,
 		SyncEvent_EntityStateSynchronizer_cameraLookAtEulerAngles = 8,
+		SyncEvent_ClaimableObjectViaRpcs_ClaimedByAuthorityId = 7,
 		SyncEvent_EntityStateSynchronizer_isCrouched = 9,
 		SyncEvent_EntityStateSynchronizer_isGrounded = 10,
 		SyncEvent_EntityStateSynchronizer_movementInput = 11,
@@ -20,6 +20,7 @@ namespace GONet
 		SyncEvent_PlayerLocalContext__isBipedInRagdollState = 15,
 		SyncEvent_PlayerLocalContext_currentTeamColor = 16,
 		SyncEvent_PlayerController_splitRotation = 17,
+		SyncEvent_ClaimableObjectViaRpcs_TotalClaimCount = 18,
 
 	}
 }

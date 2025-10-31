@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
+using UnityEngine;
 
 namespace GONet.Generation
 {
@@ -73,13 +74,44 @@ namespace GONet.Generation
 
         protected static readonly ArrayPool<IGONetAutoMagicalSync_CustomSerializer> cachedCustomSerializersArrayPool =
             new ArrayPool<IGONetAutoMagicalSync_CustomSerializer>(1000, 10, EXPECTED_AUTO_SYNC_MEMBER_COUNT_PER_GONetParticipant_MIN, EXPECTED_AUTO_SYNC_MEMBER_COUNT_PER_GONetParticipant_MAX);
+        /// <summary>
+        /// DEPRECATED: Use cachedValueSerializers instead. This field exists for backward compatibility only.
+        /// Will be removed when all generated code is migrated to two-serializer architecture.
+        /// </summary>
         protected IGONetAutoMagicalSync_CustomSerializer[] cachedCustomSerializers;
+
+        /// <summary>
+        /// Velocity-augmented sync: Serializers initialized with VALUE quantization settings.
+        /// Used when sending/receiving VALUE packets (actual position/rotation data).
+        /// </summary>
+        protected IGONetAutoMagicalSync_CustomSerializer[] cachedValueSerializers;
+
+        /// <summary>
+        /// Velocity-augmented sync: Serializers initialized with VELOCITY quantization settings.
+        /// Used when sending/receiving VELOCITY packets (velocity/angular velocity data).
+        /// </summary>
+        internal IGONetAutoMagicalSync_CustomSerializer[] cachedVelocitySerializers;
 
         protected static readonly ArrayPool<IGONetAutoMagicalSync_CustomValueBlending> cachedCustomValueBlendingsArrayPool =
             new ArrayPool<IGONetAutoMagicalSync_CustomValueBlending>(1000, 10, EXPECTED_AUTO_SYNC_MEMBER_COUNT_PER_GONetParticipant_MIN, EXPECTED_AUTO_SYNC_MEMBER_COUNT_PER_GONetParticipant_MAX);
         protected IGONetAutoMagicalSync_CustomValueBlending[] cachedCustomValueBlendings;
 
+        protected static readonly ArrayPool<IGONetAutoMagicalSync_CustomVelocityBlending> cachedCustomVelocityBlendingsArrayPool =
+            new ArrayPool<IGONetAutoMagicalSync_CustomVelocityBlending>(1000, 10, EXPECTED_AUTO_SYNC_MEMBER_COUNT_PER_GONetParticipant_MIN, EXPECTED_AUTO_SYNC_MEMBER_COUNT_PER_GONetParticipant_MAX);
+        protected IGONetAutoMagicalSync_CustomVelocityBlending[] cachedCustomVelocityBlendings;
+
         protected static readonly ConcurrentDictionary<Thread, byte[]> valueDeserializeByteArrayByThreadMap = new ConcurrentDictionary<Thread, byte[]>(5, 5);
+
+        /// <summary>
+        /// Velocity-augmented sync: Tracks sync count PER-VALUE for velocity frequency logic.
+        /// Used with VelocityFrequency to determine when to send VELOCITY vs VALUE packets.
+        /// Example: syncCounter[i] % VelocityFrequency == 0 means send VELOCITY this tick.
+        /// Array indexed by singleIndex (same as valuesChangesSupport indices).
+        /// </summary>
+        protected int[] syncCounter;
+
+        protected static readonly ArrayPool<int> syncCounterArrayPool =
+            new ArrayPool<int>(1000, 10, EXPECTED_AUTO_SYNC_MEMBER_COUNT_PER_GONetParticipant_MIN, EXPECTED_AUTO_SYNC_MEMBER_COUNT_PER_GONetParticipant_MAX);
 
         internal abstract byte CodeGenerationId { get; }
 
@@ -96,7 +128,11 @@ namespace GONet.Generation
 
             doesBaselineValueNeedAdjustingArrayPool.Return(doesBaselineValueNeedAdjusting);
             cachedCustomSerializersArrayPool.Return(cachedCustomSerializers);
+            cachedCustomSerializersArrayPool.Return(cachedValueSerializers);
+            cachedCustomSerializersArrayPool.Return(cachedVelocitySerializers);
             cachedCustomValueBlendingsArrayPool.Return(cachedCustomValueBlendings);
+            cachedCustomVelocityBlendingsArrayPool.Return(cachedCustomVelocityBlendings);
+            syncCounterArrayPool.Return(syncCounter);
 
             for (int i = 0; i < valuesCount; ++i)
             {
@@ -130,6 +166,15 @@ namespace GONet.Generation
         public bool IsValueAtRest(byte index)
         {
             return lastKnownValueAtRestBits[index] != LAST_KNOWN_VALUE_NOT_AT_REST;
+        }
+
+        /// <summary>
+        /// Check if value has PENDING at-rest broadcast (different from ALREADY_BROADCASTED initial state).
+        /// Use this to avoid skipping regular updates for objects that start in ALREADY_BROADCASTED state.
+        /// </summary>
+        public bool IsValuePendingAtRestBroadcast(byte index)
+        {
+            return lastKnownValueAtRestBits[index] == LAST_KNOWN_VALUE_IS_AT_REST_NEEDS_TO_BROADCAST;
         }
 
         internal void IndicateAtRestBroadcasted(byte index)
@@ -170,11 +215,33 @@ namespace GONet.Generation
 
                                 if (isConsideredAtRest)
                                 {
-                                    lastKnownValueAtRestBits[i] |= LAST_KNOWN_VALUE_IS_AT_REST_NEEDS_TO_BROADCAST; // or in this value instead of assign because it might already be the value of LAST_KNOWN_VALUE_IS_AT_REST_ALREADY_BROADCASTED and we do not want to change that!
-                                    if (lastKnownValueAtRestBits[i] == LAST_KNOWN_VALUE_IS_AT_REST_NEEDS_TO_BROADCAST)
+                                    // STAGE 1 FIX (Oct 2025): For velocity-eligible values, verify velocity is truly zero before sending at-rest
+                                    // Problem: Slow motion (sub-quantization) causes quantized values to appear "same" but object is actually moving
+                                    // Solution: Calculate actual velocity and only send at-rest if velocity is effectively zero
+                                    bool shouldSendAtRest = true;
+
+                                    if (valueChangeSupport.isVelocityEligible)
                                     {
-                                        valuesAtRestToBroadcast.Add(valueChangeSupport);
-                                        //GONetLog.Debug($"I now recognize as at rest.  index: {valueChangeSupport.index}");
+                                        // Calculate velocity to check if truly at rest
+                                        GONetSyncableValue calculatedVelocity = CalculateVelocity((byte)i, valueChangeSupport.lastKnownValue, nowElapsedTicks);
+                                        bool isVelocityEffectivelyZero = IsVelocityEffectivelyZero(calculatedVelocity, valueChangeSupport);
+
+                                        if (!isVelocityEffectivelyZero)
+                                        {
+                                            // Object is still moving (slow sub-quantization motion)
+                                            // Velocity bundles are handling this, don't spam at-rest messages
+                                            shouldSendAtRest = false;
+                                        }
+                                    }
+
+                                    if (shouldSendAtRest)
+                                    {
+                                        lastKnownValueAtRestBits[i] |= LAST_KNOWN_VALUE_IS_AT_REST_NEEDS_TO_BROADCAST; // or in this value instead of assign because it might already be the value of LAST_KNOWN_VALUE_IS_AT_REST_ALREADY_BROADCASTED and we do not want to change that!
+                                        if (lastKnownValueAtRestBits[i] == LAST_KNOWN_VALUE_IS_AT_REST_NEEDS_TO_BROADCAST)
+                                        {
+                                            valuesAtRestToBroadcast.Add(valueChangeSupport);
+                                            //GONetLog.Debug($"I now recognize as at rest.  index: {valueChangeSupport.index}");
+                                        }
                                     }
                                 }
                             }
@@ -209,6 +276,26 @@ namespace GONet.Generation
         private bool AreEqualConsideringQuantization(GONetMain.AutoMagicalSync_ValueMonitoringSupport_ChangedValue valueChangeSupport, GONetSyncableValue valueA, GONetSyncableValue valueB)
         {
             bool areEqual = valueA == valueB;
+
+            // CRITICAL FIX (Oct 2025): For velocity-eligible fields, ALWAYS compare ACTUAL (unquantized) values.
+            // Comparing quantized values causes change detection to fail when actual value changes by sub-quantization amounts.
+            //
+            // Example bug scenario:
+            // - Position quantization step: 76mm
+            // - Movement per sync @24Hz: 0.833mm
+            // - Quantized value stays SAME for ~92 syncs (3.8 seconds)
+            // - Change detection fails → VELOCITY bundles never sent → client sees teleporting
+            //
+            // The ENTIRE PURPOSE of velocity synthesis is to handle sub-quantization motion!
+            // Quantization should ONLY happen during serialization, NOT during change detection.
+            if (valueChangeSupport.isVelocityEligible)
+            {
+                // Velocity-eligible: Compare ACTUAL values (no quantization)
+                // This allows detection of sub-quantization motion (e.g., 0.833mm movement per sync with 76mm quantization step)
+                return areEqual;  // Already compared actual values above (valueA == valueB)
+            }
+
+            // Non-velocity fields: Use quantized comparison (existing behavior)
             if (!areEqual // if they are equal unquantized, then ASSume they will also be the same after quantization since that process is supposed to be deterministic!
                 /* && valueChangeSupport.syncAttribute_QuantizerSettingsGroup.CanBeUsedForQuantization */) // IMPORTANT: we had to remove this since the custom serializer ones would have this as false!
             {
@@ -236,6 +323,18 @@ namespace GONet.Generation
                 if (DoesMatchUniqueGrouping(valuesChangesSupport[i], onlyMatchIfUniqueGroupingMatches))
                 {
                     lastKnownValueChangesSinceLastCheck[i] = false;
+
+                    // FIX (Oct 2025): Update previous values ONLY for NON-velocity-eligible fields
+                    // - Velocity-eligible fields: UpdateLastKnownValues() already updates previous correctly BEFORE reading new value
+                    //   Overwriting here would BREAK velocity calculation by making previous == current!
+                    // - Non-velocity fields: UpdateLastKnownValues() never touches previous for these fields
+                    //   Without this update, lastKnownValue_previous stays at initial value (often 0),
+                    //   causing false change detection every frame (e.g., "0→3071" repeatedly for GONetId)
+                    if (!valuesChangesSupport[i].isVelocityEligible)
+                    {
+                        valuesChangesSupport[i].lastKnownValue_previous = valuesChangesSupport[i].lastKnownValue;
+                        valuesChangesSupport[i].lastKnownValue_previous_elapsedTicks = valuesChangesSupport[i].lastKnownValue_elapsedTicks;
+                    }
                 }
             }
         }
@@ -253,6 +352,20 @@ namespace GONet.Generation
         {
             GONetMain.AutoMagicalSync_ValueMonitoringSupport_ChangedValue valueChangeSupport = valuesChangesSupport[singleIndex];
             QuantizerSettingsGroup quantizeSettings = valueChangeSupport.syncAttribute_QuantizerSettingsGroup;
+
+            /*
+            // SUB-QUANTIZATION DIAGNOSTIC: Check delta-from-baseline before quantizing
+            float currentValue = value.System_Single;
+            float baselineValue = valuesChangesSupport[singleIndex].baselineValue_current.System_Single;
+            float deltaFromBaseline = currentValue - baselineValue;
+            Utils.SubQuantizationDiagnostics.CheckAndLogIfSubQuantization(
+                gonetParticipant.GONetId,
+                valueChangeSupport.memberName,
+                deltaFromBaseline,
+                quantizeSettings,
+                null); // No custom serializer for plain float quantization
+            */
+
             uint valueQuantized = QuantizeSingle(singleIndex, value);
             bitStream_appendTo.WriteUInt(valueQuantized, quantizeSettings.quantizeToBitCount);
         }
@@ -266,6 +379,263 @@ namespace GONet.Generation
             return valueUnquantized + valuesChangesSupport[singleIndex].baselineValue_current.System_Single;
         }
 
+        /// <summary>
+        /// Calculates velocity (delta/time) for a value based on previous snapshot.
+        /// Used when serializing velocity packets in alternating value/velocity system.
+        /// </summary>
+        protected GONetSyncableValue CalculateVelocity(byte singleIndex, GONetSyncableValue currentValue, long currentElapsedTicks)
+        {
+            GONetMain.AutoMagicalSync_ValueMonitoringSupport_ChangedValue valueChangeSupport = valuesChangesSupport[singleIndex];
+
+            // VELOCITY FIX: Use lastKnownValue_previous (value at PREVIOUS SYNC) instead of mostRecentChanges (most recent physics frame)
+            // This ensures velocity is calculated over the SYNC interval (~41ms at 24Hz), not physics frame interval (~17ms at 60Hz)
+            GONetSyncableValue previousValue = valueChangeSupport.lastKnownValue_previous;
+
+            // Check if we have a previous value (if types don't match, not initialized yet)
+            if (currentValue.GONetSyncType != previousValue.GONetSyncType)
+            {
+                // No previous value, velocity is zero
+                if (currentValue.GONetSyncType == GONetSyncableValueTypes.System_Single)
+                    return 0f;
+                else if (currentValue.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Vector2)
+                    return UnityEngine.Vector2.zero;
+                else if (currentValue.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Vector3)
+                    return UnityEngine.Vector3.zero;
+                else if (currentValue.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Vector4)
+                    return UnityEngine.Vector4.zero;
+                else if (currentValue.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Quaternion)
+                    return UnityEngine.Quaternion.identity;
+
+                return currentValue; // Fallback
+            }
+
+            // VELOCITY FIX: Use timestamp from when lastKnownValue_previous was captured (previous SYNC time)
+            long deltaTimeTicks = currentElapsedTicks - valueChangeSupport.lastKnownValue_previous_elapsedTicks;
+
+            if (deltaTimeTicks <= 0)
+            {
+                // No time elapsed, cannot calculate velocity
+                if (currentValue.GONetSyncType == GONetSyncableValueTypes.System_Single)
+                    return 0f;
+                else if (currentValue.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Vector2)
+                    return UnityEngine.Vector2.zero;
+                else if (currentValue.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Vector3)
+                    return UnityEngine.Vector3.zero;
+                else if (currentValue.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Vector4)
+                    return UnityEngine.Vector4.zero;
+                else if (currentValue.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Quaternion)
+                    return UnityEngine.Quaternion.identity;
+
+                return currentValue;
+            }
+
+            float deltaTimeSeconds = (float)deltaTimeTicks * (float)GONet.Utils.HighResolutionTimeUtils.TICKS_TO_SECONDS;
+
+            // Calculate velocity based on type
+            if (currentValue.GONetSyncType == GONetSyncableValueTypes.System_Single)
+            {
+                float delta = currentValue.System_Single - previousValue.System_Single;
+                float velocity = delta / deltaTimeSeconds;
+                return velocity;
+            }
+            else if (currentValue.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Vector2)
+            {
+                UnityEngine.Vector2 delta = currentValue.UnityEngine_Vector2 - previousValue.UnityEngine_Vector2;
+                UnityEngine.Vector2 velocity = delta / deltaTimeSeconds;
+                return velocity;
+            }
+            else if (currentValue.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Vector3)
+            {
+                UnityEngine.Vector3 delta = currentValue.UnityEngine_Vector3 - previousValue.UnityEngine_Vector3;
+                UnityEngine.Vector3 velocity = delta / deltaTimeSeconds;
+                return velocity;
+            }
+            else if (currentValue.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Vector4)
+            {
+                UnityEngine.Vector4 delta = currentValue.UnityEngine_Vector4 - previousValue.UnityEngine_Vector4;
+                return delta / deltaTimeSeconds;
+            }
+            else if (currentValue.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Quaternion)
+            {
+                // Calculate angular velocity (omega) from quaternion delta
+                UnityEngine.Quaternion q0 = previousValue.UnityEngine_Quaternion;
+                UnityEngine.Quaternion q1 = currentValue.UnityEngine_Quaternion;
+                UnityEngine.Vector3 omega = CalculateAngularVelocity(q0, q1, deltaTimeSeconds);
+                return omega; // Store as Vector3 (axis * radians/sec)
+            }
+
+            return currentValue; // Fallback
+        }
+
+        /// <summary>
+        /// Determines if calculated velocity is effectively zero (object truly at rest).
+        /// Used by at-rest detection to avoid spamming messages during slow sub-quantization motion.
+        ///
+        /// Thresholds:
+        /// - Linear velocity: 0.001 units/sec (~0.04mm at 24Hz sync rate)
+        /// - Angular velocity: 0.01 rad/sec (~0.57 degrees/sec)
+        ///
+        /// Rationale: These thresholds are well below typical quantization steps (76mm for position),
+        /// so any motion above these thresholds will be handled by velocity synthesis.
+        /// </summary>
+        private bool IsVelocityEffectivelyZero(GONetSyncableValue velocity, GONetMain.AutoMagicalSync_ValueMonitoringSupport_ChangedValue valueChangeSupport)
+        {
+            const float LINEAR_VELOCITY_THRESHOLD = 0.001f; // 0.001 units/sec
+            const float ANGULAR_VELOCITY_THRESHOLD = 0.01f; // 0.01 radians/sec
+
+            if (velocity == null)
+            {
+                return true; // No velocity data = at rest
+            }
+
+            if (velocity.GONetSyncType == GONetSyncableValueTypes.System_Single)
+            {
+                float vel = velocity.System_Single;
+                return Mathf.Abs(vel) < LINEAR_VELOCITY_THRESHOLD;
+            }
+            else if (velocity.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Vector2)
+            {
+                UnityEngine.Vector2 vel = velocity.UnityEngine_Vector2;
+                return vel.sqrMagnitude < (LINEAR_VELOCITY_THRESHOLD * LINEAR_VELOCITY_THRESHOLD);
+            }
+            else if (velocity.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Vector3)
+            {
+                UnityEngine.Vector3 vel = velocity.UnityEngine_Vector3;
+                return vel.sqrMagnitude < (LINEAR_VELOCITY_THRESHOLD * LINEAR_VELOCITY_THRESHOLD);
+            }
+            else if (velocity.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Vector4)
+            {
+                UnityEngine.Vector4 vel = velocity.UnityEngine_Vector4;
+                return vel.sqrMagnitude < (LINEAR_VELOCITY_THRESHOLD * LINEAR_VELOCITY_THRESHOLD);
+            }
+            else if (velocity.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Quaternion)
+            {
+                // Quaternion velocity is stored as Vector3 (angular velocity)
+                // This shouldn't happen (CalculateVelocity returns Vector3 for Quaternions)
+                return true; // Treat as at rest if unexpected type
+            }
+
+            return true; // Unknown type, assume at rest
+        }
+
+        /// <summary>
+        /// Calculates distance between two values based on type.
+        /// Used to determine if local synthesized value is close enough to quantized value.
+        /// </summary>
+        public float CalculateDistanceBetweenValues(GONetSyncableValue valueA, GONetSyncableValue valueB)
+        {
+            if (valueA.GONetSyncType == GONetSyncableValueTypes.System_Single)
+            {
+                return Mathf.Abs(valueA.System_Single - valueB.System_Single);
+            }
+            else if (valueA.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Vector2)
+            {
+                return UnityEngine.Vector2.Distance(valueA.UnityEngine_Vector2, valueB.UnityEngine_Vector2);
+            }
+            else if (valueA.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Vector3)
+            {
+                return UnityEngine.Vector3.Distance(valueA.UnityEngine_Vector3, valueB.UnityEngine_Vector3);
+            }
+            else if (valueA.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Vector4)
+            {
+                return UnityEngine.Vector4.Distance(valueA.UnityEngine_Vector4, valueB.UnityEngine_Vector4);
+            }
+            else if (valueA.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Quaternion)
+            {
+                // Quaternion distance = angle in degrees
+                return UnityEngine.Quaternion.Angle(valueA.UnityEngine_Quaternion, valueB.UnityEngine_Quaternion);
+            }
+
+            return 0f; // Unknown type
+        }
+
+        /// <summary>
+        /// Gets the quantization step size for a value.
+        /// Used as threshold for smart at-rest value selection.
+        ///
+        /// Formula: step = (upperBound - lowerBound) / (2^bitCount - 1)
+        /// Example: (-125 to 125) with 14 bits = 250 / 16383 = 0.01526 units
+        /// </summary>
+        public float GetQuantizationStepForValue(byte singleIndex)
+        {
+            GONetMain.AutoMagicalSync_ValueMonitoringSupport_ChangedValue valueChangeSupport = valuesChangesSupport[singleIndex];
+            GONet.Utils.QuantizerSettingsGroup settings = valueChangeSupport.syncAttribute_QuantizerSettingsGroup;
+
+            // Check if quantization is disabled
+            if (settings.quantizeToBitCount == 0)
+            {
+                return float.MaxValue; // No quantization = infinite precision
+            }
+
+            // Calculate quantization step from settings
+            float boundRange = settings.upperBound - settings.lowerBound;
+            float maxQuantizedValue = (float)System.Math.Pow(2.0, settings.quantizeToBitCount) - 1f;
+            float step = boundRange / maxQuantizedValue;
+
+            // Special handling for Quaternions (Smallest3 encoding)
+            // Quaternion serializers have different quantization characteristics
+            IGONetAutoMagicalSync_CustomSerializer serializer = cachedCustomSerializers[singleIndex];
+            if (serializer is QuaternionSerializer)
+            {
+                // Quaternion uses Smallest3 encoding - each component quantized to [-1/sqrt(2), +1/sqrt(2)]
+                const float SMALLEST3_RANGE = 1.41421356f; // sqrt(2)
+                step = SMALLEST3_RANGE / maxQuantizedValue;
+            }
+
+            return step;
+        }
+
+        /// <summary>
+        /// Calculates angular velocity (omega) from two quaternions.
+        /// Returns a Vector3 representing the axis of rotation scaled by angular speed (radians/second).
+        /// Formula: omega = 2 * axis * angle / deltaTime
+        /// where (axis, angle) = ToAxisAngle(q1 * q0^-1)
+        /// </summary>
+        protected UnityEngine.Vector3 CalculateAngularVelocity(UnityEngine.Quaternion q0, UnityEngine.Quaternion q1, float deltaTime)
+        {
+            if (deltaTime <= 0f)
+                return UnityEngine.Vector3.zero;
+
+            // Calculate relative rotation: q_delta = q1 * q0^-1
+            UnityEngine.Quaternion q0Inverse = UnityEngine.Quaternion.Inverse(q0);
+            UnityEngine.Quaternion qDelta = q1 * q0Inverse;
+
+            // Ensure shortest path (quaternion double-cover: q and -q represent same rotation)
+            if (qDelta.w < 0f)
+            {
+                qDelta.x = -qDelta.x;
+                qDelta.y = -qDelta.y;
+                qDelta.z = -qDelta.z;
+                qDelta.w = -qDelta.w;
+            }
+
+            // Extract axis-angle representation
+            // For quaternion q = (cos(angle/2), sin(angle/2) * axis)
+            // angle = 2 * acos(w)
+            // axis = (x, y, z) / sin(angle/2)
+
+            float angle = 2f * UnityEngine.Mathf.Acos(UnityEngine.Mathf.Clamp(qDelta.w, -1f, 1f));
+
+            // Handle near-zero rotation (avoid division by zero)
+            float sinHalfAngle = UnityEngine.Mathf.Sin(angle * 0.5f);
+            if (UnityEngine.Mathf.Abs(sinHalfAngle) < 1e-6f)
+            {
+                return UnityEngine.Vector3.zero;
+            }
+
+            // Extract axis
+            UnityEngine.Vector3 axis = new UnityEngine.Vector3(
+                qDelta.x / sinHalfAngle,
+                qDelta.y / sinHalfAngle,
+                qDelta.z / sinHalfAngle
+            );
+
+            // Angular velocity = axis * angle / deltaTime
+            UnityEngine.Vector3 omega = axis * (angle / deltaTime);
+
+            return omega;
+        }
+
         internal abstract void SetAutoMagicalSyncValue(byte index, GONetSyncableValue value);
 
         internal abstract GONetSyncableValue GetAutoMagicalSyncValue(byte index);
@@ -277,13 +647,116 @@ namespace GONet.Generation
         /// </summary>
         internal abstract void SerializeAll(Utils.BitByBitByteArrayBuilder bitStream_appendTo);
 
-        internal abstract void SerializeSingle(Utils.BitByBitByteArrayBuilder bitStream_appendTo, byte singleIndex);
+        internal abstract void SerializeSingle(Utils.BitByBitByteArrayBuilder bitStream_appendTo, byte singleIndex, bool isVelocityBundle = false);
 
         public bool TryGetIndexByMemberName(string memberName, out byte index)
         {
             var valueChangeSupport = valuesChangesSupport.FirstOrDefault(x => x != null && x.memberName == memberName);
             index = valueChangeSupport != null ? valueChangeSupport.index : default;
             return valueChangeSupport != null;
+        }
+
+        /// <summary>
+        /// VELOCITY-AUGMENTED SYNC: Checks if the calculated velocity for a value fits within its quantization range.
+        /// Used to decide if value should be sent in VELOCITY bundle or fallback to VALUE bundle.
+        /// </summary>
+        internal bool IsVelocityWithinQuantizationRange(byte valueIndex)
+        {
+            var changesSupport = valuesChangesSupport[valueIndex];
+            // Non-velocity-eligible values always return false
+            if (!changesSupport.isVelocityEligible)
+            {
+                return false;
+            }
+
+            // CRITICAL FIX: Use lastKnownValue (authority's actual transform) NOT mostRecentChanges (client-received snapshots)!
+            // mostRecentChanges is for VALUE BLENDING on clients, not for authority velocity calculation!
+            var current = changesSupport.lastKnownValue;
+            var previous = changesSupport.lastKnownValue_previous;
+            // Check if we have previous value (if current == previous, no change has occurred yet)
+            if (current.GONetSyncType != previous.GONetSyncType)
+            {
+                return false; // Types don't match - not initialized yet
+            }
+
+            // OPTIMIZATION: Use pre-calculated per-sync-interval bounds (no division required)
+            // These were calculated at initialization: bounds_per_second * deltaTime
+            float lowerBoundPerInterval = changesSupport.velocityQuantizeLowerBound_PerSyncInterval;
+            float upperBoundPerInterval = changesSupport.velocityQuantizeUpperBound_PerSyncInterval;
+            // Calculate raw delta (no division) and compare against per-interval bounds
+            switch (changesSupport.codeGenerationMemberType)
+            {
+                case GONetSyncableValueTypes.UnityEngine_Vector2:
+                    {
+                        var positionDelta = current.UnityEngine_Vector2 - previous.UnityEngine_Vector2;
+                        // Check each component against per-interval bounds
+                        return positionDelta.x >= lowerBoundPerInterval && positionDelta.x <= upperBoundPerInterval &&
+                               positionDelta.y >= lowerBoundPerInterval && positionDelta.y <= upperBoundPerInterval;
+                    }
+                case GONetSyncableValueTypes.UnityEngine_Vector3:
+                    {
+                        var positionDelta = current.UnityEngine_Vector3 - previous.UnityEngine_Vector3;
+                        bool xInRange = positionDelta.x >= lowerBoundPerInterval && positionDelta.x <= upperBoundPerInterval;
+                        bool yInRange = positionDelta.y >= lowerBoundPerInterval && positionDelta.y <= upperBoundPerInterval;
+                        bool zInRange = positionDelta.z >= lowerBoundPerInterval && positionDelta.z <= upperBoundPerInterval;
+                        bool result = xInRange && yInRange && zInRange;
+
+                        return result;
+                    }
+                case GONetSyncableValueTypes.UnityEngine_Vector4:
+                    {
+                        var positionDelta = current.UnityEngine_Vector4 - previous.UnityEngine_Vector4;
+                        // Check each component against per-interval bounds
+                        return positionDelta.x >= lowerBoundPerInterval && positionDelta.x <= upperBoundPerInterval &&
+                               positionDelta.y >= lowerBoundPerInterval && positionDelta.y <= upperBoundPerInterval &&
+                               positionDelta.z >= lowerBoundPerInterval && positionDelta.z <= upperBoundPerInterval &&
+                               positionDelta.w >= lowerBoundPerInterval && positionDelta.w <= upperBoundPerInterval;
+                    }
+                case GONetSyncableValueTypes.UnityEngine_Quaternion:
+                    {
+                        var currentQ = current.UnityEngine_Quaternion;
+                        var previousQ = previous.UnityEngine_Quaternion;
+
+                        // Compute delta quaternion
+                        var deltaQ = currentQ * Quaternion.Inverse(previousQ);
+
+                        // Normalize for safety (floating-point precision)
+                        deltaQ = Quaternion.Normalize(deltaQ);
+
+                        // Ensure smallest angle representation (q and -q are equivalent)
+                        if (deltaQ.w < 0f)
+                        {
+                            deltaQ = new Quaternion(-deltaQ.x, -deltaQ.y, -deltaQ.z, -deltaQ.w);
+                        }
+
+                        // Use optimized Log to get half-rotation vector
+                        var logDelta = QuaternionUtilsOptimized.Log(deltaQ);
+
+                        // Full rotation delta vector (angular displacement: axis * angle in radians)
+                        // Multiply by 2 to get full angle from half-angle representation
+                        var rotationDelta = new Vector3(
+                            logDelta.x * 2f,
+                            logDelta.y * 2f,
+                            logDelta.z * 2f
+                        );
+
+                        // DIAGNOSTIC: Log quaternion velocity check details
+                        bool xPass = rotationDelta.x >= lowerBoundPerInterval && rotationDelta.x <= upperBoundPerInterval;
+                        bool yPass = rotationDelta.y >= lowerBoundPerInterval && rotationDelta.y <= upperBoundPerInterval;
+                        bool zPass = rotationDelta.z >= lowerBoundPerInterval && rotationDelta.z <= upperBoundPerInterval;
+                        bool result = xPass && yPass && zPass;
+
+                        // Check each component against per-interval bounds (assuming isotropic quantization like Vector3)
+                        return result;
+                    }
+                case GONetSyncableValueTypes.System_Single:
+                    {
+                        var valueDelta = current.System_Single - previous.System_Single;
+                        return valueDelta >= lowerBoundPerInterval && valueDelta <= upperBoundPerInterval;
+                    }
+                default:
+                    return false; // Unknown type, use VALUE bundle
+            }
         }
 
         /// <summary>
@@ -297,17 +770,21 @@ namespace GONet.Generation
         ///  Deserializes a single value (using <paramref name="singleIndex"/> to know which) from <paramref name="bitStream_readFrom"/>
         ///  and uses them to modify appropriate member variables internally.
         /// </summary>
-        internal void DeserializeInitSingle(Utils.BitByBitByteArrayBuilder bitStream_readFrom, byte singleIndex, long assumedElapsedTicksAtChange)
+        internal virtual void DeserializeInitSingle(Utils.BitByBitByteArrayBuilder bitStream_readFrom, byte singleIndex, long assumedElapsedTicksAtChange, bool useVelocitySerializer = false)
         {
             //GONetLog.Debug($"********************should be doing some init single index: {singleIndex}");
-            GONetSyncableValue value = DeserializeInitSingle_ReadOnlyNotApply(bitStream_readFrom, singleIndex);
+            GONetSyncableValue value = DeserializeInitSingle_ReadOnlyNotApply(bitStream_readFrom, singleIndex, useVelocitySerializer);
             InitSingle(value, singleIndex, assumedElapsedTicksAtChange);
         }
 
         /// <summary>
-        /// NOTE: This is only virtual to avoid upgrading customers prior to this being added having compilation issues when upgrading from a previous version of GONet
+        /// NOTE: This is only virtual to avoid upgrading customers prior to this being added having compilation issues when upgrading from a previous version of GONet.
         /// </summary>
-        internal virtual GONetSyncableValue DeserializeInitSingle_ReadOnlyNotApply(Utils.BitByBitByteArrayBuilder bitStream_readFrom, byte singleIndex)
+        /// <param name="bitStream_readFrom">The bit stream to deserialize from</param>
+        /// <param name="singleIndex">The index of the value to deserialize</param>
+        /// <param name="useVelocitySerializer">Velocity-augmented sync: If true, uses cachedVelocitySerializers; if false, uses cachedValueSerializers. Default false for backward compatibility.</param>
+        /// <returns>The deserialized value (either VALUE or VELOCITY depending on useVelocitySerializer parameter)</returns>
+        internal virtual GONetSyncableValue DeserializeInitSingle_ReadOnlyNotApply(Utils.BitByBitByteArrayBuilder bitStream_readFrom, byte singleIndex, bool useVelocitySerializer = false)
         {
             // NOTE: this return here is dummy and overrides in child classes will NOT call base.DeserializeInitSingle_ReadOnlyNotApply()
             return default;
@@ -379,6 +856,7 @@ namespace GONet.Generation
                 if (doesBaselineValueNeedAdjusting[i])
                 {
                     GONetMain.AutoMagicalSync_ValueMonitoringSupport_ChangedValue valueChangeSupport = valuesChangesSupport[i];
+
                     valueChangeSupport.baselineValue_current = valueChangeSupport.lastKnownValue;
 
                     { // queue up for later (i.e., in proper thread): fire reliable events to everyone that the baseline changed so everyone adjusts accordingly so the networking will work 
@@ -407,9 +885,22 @@ namespace GONet.Generation
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static bool DoesMatchUniqueGrouping(GONetMain.AutoMagicalSync_ValueMonitoringSupport_ChangedValue valueChangeSupport, GONetMain.SyncBundleUniqueGrouping onlyMatchIfUniqueGroupingMatches)
         {
-            return 
-                onlyMatchIfUniqueGroupingMatches.scheduleFrequency == valueChangeSupport.syncAttribute_SyncChangesEverySeconds &&
-                onlyMatchIfUniqueGroupingMatches.reliability == valueChangeSupport.syncAttribute_Reliability;
+            // PHYSICS SYNC SPECIAL CASE: Physics sync grouping (mustRunOnUnityMainThread=true, END_OF_FRAME frequency)
+            // bypasses frequency matching and processes ALL members. This is because:
+            // 1. Physics objects are filtered at participant level (IsRigidBodyOwnerOnlyControlled check in Process() loop)
+            // 2. Physics sync runs at 50Hz (via WaitForFixedUpdate), not based on member frequency
+            // 3. Member frequencies (like 24Hz for Transform.position/rotation) don't apply to physics pipeline
+            bool isPhysicsSyncGrouping = onlyMatchIfUniqueGroupingMatches.mustRunOnUnityMainThread &&
+                                         onlyMatchIfUniqueGroupingMatches.scheduleFrequency == AutoMagicalSyncFrequencies.END_OF_FRAME_IN_WHICH_CHANGE_OCCURS_SECONDS;
+            if (isPhysicsSyncGrouping)
+            {
+                // Physics sync: Process all members (frequency check bypassed)
+                return onlyMatchIfUniqueGroupingMatches.reliability == valueChangeSupport.syncAttribute_Reliability;
+            }
+
+            // Regular sync: Match both frequency and reliability
+            return onlyMatchIfUniqueGroupingMatches.scheduleFrequency == valueChangeSupport.syncAttribute_SyncChangesEverySeconds &&
+                   onlyMatchIfUniqueGroupingMatches.reliability == valueChangeSupport.syncAttribute_Reliability;
         }
 
         internal void AppendListWithAllValues(List<GONetMain.AutoMagicalSync_ValueMonitoringSupport_ChangedValue> syncValuesToSend)
@@ -433,21 +924,86 @@ namespace GONet.Generation
         }
 
         internal bool TryGetBlendedValue(
-            byte index, 
-            NumericValueChangeSnapshot[] valueBuffer, 
-            int valueCount, 
-            long atElapsedTicks, 
+            byte index,
+            NumericValueChangeSnapshot[] valueBuffer,
+            int valueCount,
+            long atElapsedTicks,
             out GONetSyncableValue blendedValue,
-            out bool didExtrapolate)
+            out bool didExtrapolatePastMostRecentChanges)
         {
+            // Check if velocity-aware blending should be used
+            bool hasVelocityData = false;
+            if (valueCount > 0)
+            {
+                // Check most recent snapshot for velocity data
+                NumericValueChangeSnapshot mostRecent = valueBuffer[valueCount - 1];
+                // Velocity data exists if: flagged as synthesized OR velocity type matches value type
+                hasVelocityData = mostRecent.wasSynthesizedFromVelocity ||
+                                  (mostRecent.velocity.GONetSyncType == mostRecent.numericValue.GONetSyncType) ||
+                                  (mostRecent.numericValue.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Quaternion &&
+                                   mostRecent.velocity.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Vector3); // Angular velocity stored as Vector3
+            }
+
+            // CRITICAL: Check velocity expiration (same as VALUE bundle handling in GONet.cs)
+            // Velocity should only be used if it's recent (< 200ms old) to prevent wildly incorrect extrapolation
+            bool isVelocityRecent = false;
+            if (hasVelocityData)
+            {
+                var changesSupport = valuesChangesSupport[index];
+                long currentTicks = GONetMain.Time.ElapsedTicks;
+                long velocityAgeTicks = currentTicks - changesSupport.lastVelocityTimestamp;
+                long velocityValidDurationTicks = GONetMain.AutoMagicalSync_ValueMonitoringSupport_ChangedValue.VELOCITY_VALID_DURATION_MS * System.TimeSpan.TicksPerMillisecond;
+                isVelocityRecent = (velocityAgeTicks < velocityValidDurationTicks);
+            }
+
+            // Use velocity blending if available, velocity data exists, AND velocity is recent
+            if (hasVelocityData && isVelocityRecent)
+            {
+                IGONetAutoMagicalSync_CustomVelocityBlending customVelocityBlending = cachedCustomVelocityBlendings[index];
+                if (customVelocityBlending != null)
+                {
+                    // Use velocity-aware extrapolation
+                    blendedValue = customVelocityBlending.ExtrapolateWithVelocityContext(
+                        valueBuffer,
+                        valueCount,
+                        atElapsedTicks,
+                        gonetParticipant);
+
+                    // Velocity extrapolation always extrapolates (uses velocity data)
+                    VelocitySyncTelemetry.TrackExtrapolation(gonetParticipant.GONetId);
+
+                    // TRACE: Log velocity-aware extrapolation decision
+                    if (blendedValue.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Quaternion)
+                    {
+                        VelocitySyncTelemetry.TraceClientBlend(gonetParticipant.GONetId, index, "EXTRAPOLATION", hasVelocityData, blendedValue.UnityEngine_Quaternion);
+                    }
+
+                    didExtrapolatePastMostRecentChanges = true;
+                    return true;
+                }
+            }
+
+            // Fall back to standard value blending
+            VelocitySyncTelemetry.TrackStandardBlendingFallback();
             IGONetAutoMagicalSync_CustomValueBlending customValueBlending = cachedCustomValueBlendings[index];
             //GONetLog.Debug($"grease null blender? {(customValueBlending == null)} @ index: {index}");
             if (customValueBlending != null)
             {
-                return customValueBlending.TryGetBlendedValue(valueBuffer, valueCount, atElapsedTicks, out blendedValue, out didExtrapolate);
+                bool result = customValueBlending.TryGetBlendedValue(valueBuffer, valueCount, atElapsedTicks, out blendedValue, out didExtrapolatePastMostRecentChanges);
+                if (result)
+                {
+                    VelocitySyncTelemetry.TrackInterpolation(gonetParticipant.GONetId);
+
+                    // TRACE: Log standard interpolation decision
+                    if (blendedValue.GONetSyncType == GONetSyncableValueTypes.UnityEngine_Quaternion)
+                    {
+                        VelocitySyncTelemetry.TraceClientBlend(gonetParticipant.GONetId, index, "INTERPOLATION", hasVelocityData, blendedValue.UnityEngine_Quaternion);
+                    }
+                }
+                return result;
             }
 
-            didExtrapolate = false;
+            didExtrapolatePastMostRecentChanges = false;
             blendedValue = default;
             return false;
         }

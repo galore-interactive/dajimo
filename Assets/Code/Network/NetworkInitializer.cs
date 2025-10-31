@@ -30,8 +30,8 @@ public class NetworkInitializer : MonoBehaviour
 
     public void StartClient()
     {
-        GONetMain.GONetClient = new GONetClient(new NetcodeIO.NET.Client());
-        
+        GONetMain.GONetClient = new GONetClient();
+
         GONetGlobal.ServerIPAddress_Actual = GONetGlobal.ServerIPAddress_Default;
         GONetGlobal.ServerPort_Actual = GONetGlobal.ServerPort_Default;
         GONetMain.GONetClient.ConnectToServer(GONetGlobal.ServerIPAddress_Actual, GONetGlobal.ServerPort_Actual, 30);
@@ -56,7 +56,7 @@ public class NetworkInitializer : MonoBehaviour
     {
         GONetGlobal.ServerIPAddress_Actual = GONetGlobal.ServerIPAddress_Default;
         GONetGlobal.ServerPort_Actual = GONetGlobal.ServerPort_Default;
-        GONetMain.gonetServer = new GONetServer(MAX_CLIENT_COUNT_PER_SERVER, GONetGlobal.ServerIPAddress_Actual, GONetGlobal.ServerPort_Actual);
+        GONetMain.gonetServer = new GONetServer(MAX_CLIENT_COUNT_PER_SERVER, GONetGlobal.ServerPort_Actual);
 
         GONetMain.gonetServer.Start();
 

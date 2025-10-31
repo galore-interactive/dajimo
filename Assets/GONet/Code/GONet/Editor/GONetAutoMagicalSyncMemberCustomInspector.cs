@@ -78,6 +78,40 @@ namespace GONet.Editor
             }
             */
 
+            { // AutoDontDestroyOnLoad - IMPORTANT: This should be at the top!
+                var pre = GUI.enabled;
+                GUI.enabled = !Application.isPlaying;
+                EditorGUILayout.BeginHorizontal();
+                SerializedProperty serializedProperty = serializedObject.FindProperty(nameof(GONetParticipant.AutoDontDestroyOnLoad));
+                const string TT = @"When enabled, this GONetParticipant (and its GameObject) will be automatically moved to the DontDestroyOnLoad scene when instantiated at runtime.
+
+This is essential for objects that must persist across scene changes, such as:
+- GONet_GlobalContext (networking session context)
+- GONet_LocalContext (per-client connection state)
+- Player objects that should survive scene transitions
+- Any networked object that needs to remain active during scene loading
+
+WHY THIS IS IMPORTANT:
+Without this flag, these objects would be destroyed during scene changes, breaking network synchronization and causing late-joining clients to fail initialization.
+
+When a scene unloads, any objects in that scene are normally destroyed. By moving to DontDestroyOnLoad, the object persists and remains synchronized across all clients.
+
+WHEN TO USE:
+- Enable for networking infrastructure objects (GONet contexts)
+- Enable for player objects that should persist across scenes
+- Enable for any object spawned at runtime that needs to survive scene changes
+- Leave disabled for scene-specific objects that should be destroyed with their scene
+
+NOTE: This only affects runtime instantiation. Objects placed directly in scenes during design time follow Unity's normal scene lifecycle.";
+                GUIContent tooltip = new GUIContent(StringUtils.AddSpacesBeforeUppercase(nameof(GONetParticipant.AutoDontDestroyOnLoad), 1), TT);
+                if (EditorGUILayout.PropertyField(serializedProperty, tooltip))
+                {
+                    // Property field changed
+                }
+                EditorGUILayout.EndHorizontal();
+                GUI.enabled = pre;
+            }
+
             { // IsRigidBodyOwnerOnlyControlled
                 var pre = GUI.enabled;
                 GUI.enabled = !Application.isPlaying;
@@ -180,6 +214,42 @@ and check if that event's envelope has <see cref=""GONetEventEnvelope.IsSourceRe
                     const string IS_MINE = "Is Mine?";
                     EditorGUILayout.LabelField(IS_MINE);
                     EditorGUILayout.Toggle(GONetMain.IsMine(targetGONetParticipant));
+                    EditorGUILayout.EndHorizontal();
+                }
+
+                { // Client_IsInLimbo
+                    EditorGUILayout.BeginHorizontal();
+                    const string IS_IN_LIMBO = "Client Is In Limbo?";
+                    const string TT = @"CLIENT ONLY: Indicates this object is in 'limbo' state - spawned locally but waiting for GONetId batch from server.
+
+IMPORTANT: Limbo is RARE - only occurs during extreme rapid spawning (100+ spawns/sec). Most games will NEVER see this.
+
+While in limbo:
+- Object exists locally but has NO GONetId assigned
+- Object is NOT networked and CANNOT sync values
+- Object CANNOT receive RPCs
+- OnGONetReady() is BLOCKED (will fire after graduation)
+
+When a new batch arrives from server, limbo objects automatically 'graduate':
+- GONetId assigned from batch
+- Disabled components re-enabled (if limbo mode disabled them)
+- OnGONetReady() fired
+- Object becomes fully networked
+
+See Client_GONetIdBatchLimboMode enum for different limbo mode behaviors.";
+                    GUIContent tooltip = new GUIContent(IS_IN_LIMBO, TT);
+                    EditorGUILayout.LabelField(tooltip);
+
+                    // Show with colored background if in limbo (yellow/warning color)
+                    Color previousColor = GUI.backgroundColor;
+                    if (targetGONetParticipant.Client_IsInLimbo)
+                    {
+                        GUI.backgroundColor = new Color(1f, 1f, 0f, 0.5f); // Yellow tint
+                    }
+
+                    EditorGUILayout.Toggle(targetGONetParticipant.Client_IsInLimbo);
+                    GUI.backgroundColor = previousColor;
+
                     EditorGUILayout.EndHorizontal();
                 }
 
@@ -404,19 +474,59 @@ and check if that event's envelope has <see cref=""GONetEventEnvelope.IsSourceRe
 
                         GUI.enabled = guiEnabledPrevious_inner;
 
+                        // Check if Rigidbody physics interpolation will be used
+                        bool hasRigidbody = targetGONetParticipant.GetComponent<Rigidbody>() != null || targetGONetParticipant.GetComponent<Rigidbody2D>() != null;
+                        bool isRigidBodyOwnerControlled = targetGONetParticipant.IsRigidBodyOwnerOnlyControlled;
+
                         { // IsPositionSyncd:
+                            const string POSITION_TT = @"Enable to synchronize position across the network.
+
+IMPORTANT - Rigidbody Physics Interpolation:
+When 'Is Rigid Body Owner Only Controlled' is checked AND a Rigidbody component exists, Unity's physics interpolation handles smooth rendering on non-authority clients instead of GONet's value blending system.
+
+How it works:
+- Authority (IsMine=true): Physics simulation runs normally
+- Non-authority (IsMine=false): Rigidbody set to kinematic, Unity interpolation enabled
+- Network updates applied via Rigidbody.MovePosition() for physics-aware rendering
+- Unity's Rigidbody.interpolation smooths motion between network updates
+
+Profile settings below still control sync frequency and reliability, but value blending is handled by Unity's physics system when using Rigidbody.";
+
+                            string positionTooltip = (hasRigidbody && isRigidBodyOwnerControlled)
+                                ? POSITION_TT
+                                : "Enable to synchronize position across the network.";
+
                             EditorGUILayout.BeginHorizontal();
-                            EditorGUILayout.LabelField(string.Concat("Is Position Syncd"), GUILayout.MaxWidth(150));
-                            SerializedProperty serializedProperty = serializedObject.FindProperty($"{nameof(GONetParticipant.IsPositionSyncd)}");
-                            EditorGUILayout.PropertyField(serializedProperty, GUIContent.none, false, GUILayout.MaxWidth(50)); // IMPORTANT: without this, editing would never save/persist changes!
+                            GUIContent positionLabel = new GUIContent(string.Concat("Is Position Syncd"), positionTooltip);
+                            EditorGUILayout.LabelField(positionLabel, GUILayout.MaxWidth(150));
+                            SerializedProperty positionProperty = serializedObject.FindProperty($"{nameof(GONetParticipant.IsPositionSyncd)}");
+                            EditorGUILayout.PropertyField(positionProperty, GUIContent.none, false, GUILayout.MaxWidth(50)); // IMPORTANT: without this, editing would never save/persist changes!
                             DrawGONetSyncProfileTemplateButton(GONetAutoMagicalSyncAttribute.PROFILE_TEMPLATE_NAME___TRANSFORM_POSITION);
                             EditorGUILayout.EndHorizontal();
                         }
                         { // IsRotationSyncd:
+                            const string ROTATION_TT = @"Enable to synchronize rotation across the network.
+
+IMPORTANT - Rigidbody Physics Interpolation:
+When 'Is Rigid Body Owner Only Controlled' is checked AND a Rigidbody component exists, Unity's physics interpolation handles smooth rendering on non-authority clients instead of GONet's value blending system.
+
+How it works:
+- Authority (IsMine=true): Physics simulation runs normally
+- Non-authority (IsMine=false): Rigidbody set to kinematic, Unity interpolation enabled
+- Network updates applied via Rigidbody.MoveRotation() for physics-aware rendering
+- Unity's Rigidbody.interpolation smooths motion between network updates
+
+Profile settings below still control sync frequency and reliability, but value blending is handled by Unity's physics system when using Rigidbody.";
+
+                            string rotationTooltip = (hasRigidbody && isRigidBodyOwnerControlled)
+                                ? ROTATION_TT
+                                : "Enable to synchronize rotation across the network.";
+
                             EditorGUILayout.BeginHorizontal();
-                            EditorGUILayout.LabelField(string.Concat("Is Rotation Syncd"), GUILayout.MaxWidth(150));
-                            SerializedProperty serializedProperty = serializedObject.FindProperty($"{nameof(GONetParticipant.IsRotationSyncd)}");
-                            EditorGUILayout.PropertyField(serializedProperty, GUIContent.none, false, GUILayout.MaxWidth(50)); // IMPORTANT: without this, editing would never save/persist changes!
+                            GUIContent rotationLabel = new GUIContent(string.Concat("Is Rotation Syncd"), rotationTooltip);
+                            EditorGUILayout.LabelField(rotationLabel, GUILayout.MaxWidth(150));
+                            SerializedProperty rotationProperty = serializedObject.FindProperty($"{nameof(GONetParticipant.IsRotationSyncd)}");
+                            EditorGUILayout.PropertyField(rotationProperty, GUIContent.none, false, GUILayout.MaxWidth(50)); // IMPORTANT: without this, editing would never save/persist changes!
                             DrawGONetSyncProfileTemplateButton(GONetAutoMagicalSyncAttribute.PROFILE_TEMPLATE_NAME___TRANSFORM_ROTATION);
                             EditorGUILayout.EndHorizontal();
                         }

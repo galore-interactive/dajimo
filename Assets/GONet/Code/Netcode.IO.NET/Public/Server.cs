@@ -7,6 +7,8 @@ using System.Linq;
 using NetcodeIO.NET.Utils;
 using NetcodeIO.NET.Utils.IO;
 using NetcodeIO.NET.Internal;
+using GONet.Utils;
+using System.Collections.Generic;
 
 namespace NetcodeIO.NET
 {
@@ -170,6 +172,7 @@ namespace NetcodeIO.NET
 		private IPEndPoint listenEndpoint;
 		private IPEndPoint listenEndpointV6;
 
+
 		internal bool IsRunning => isRunning;
 		private bool isRunning = false;
 
@@ -196,7 +199,7 @@ namespace NetcodeIO.NET
 
         #endregion
 
-        public Server(int maxSlots, string address, int port, ulong protocolID, byte[] privateKey)
+        public Server(int maxSlots, int port, ulong protocolID, byte[] privateKey)
         {
             this.tickrate = 60;
 
@@ -208,23 +211,10 @@ namespace NetcodeIO.NET
             this.clientSlots = new RemoteClient[maxSlots];
             this.encryptionManager = new EncryptionManager(maxSlots);
 
-            IPAddress ipAddress;
-            try
-            {
-                // Try to parse as an IP address
-                ipAddress = IPAddress.Parse(address);
-            }
-            catch (FormatException)
-            {
-                // If parsing fails, resolve the hostname
-                ipAddress = Dns.GetHostAddresses(address).FirstOrDefault() ?? IPAddress.IPv6Any;
-            }
-
             this.listenEndpoint = new IPEndPoint(IPAddress.Any, port);
             // Use IPv6Any to allow binding to both IPv4 and IPv6 if possible
             this.listenEndpointV6 = new IPEndPoint(IPAddress.IPv6Any, port);
 
-            // Determine the address family based on the resolved IP
             AddressFamily addressFamily = AddressFamily.InterNetworkV6; // Default to IPv6 for dual-stack
 
             // Create UDPSocketContext with dual-stack support
@@ -239,7 +229,7 @@ namespace NetcodeIO.NET
             KeyUtils.GenerateKey(this.challengeKey);
         }
 
-        internal Server(ISocketContext socketContext, int maxSlots, string address, int port, ulong protocolID, byte[] privateKey)
+        internal Server(ISocketContext socketContext, int maxSlots, int port, ulong protocolID, byte[] privateKey)
 		{
 			this.tickrate = 60;
 
@@ -251,8 +241,8 @@ namespace NetcodeIO.NET
 			this.clientSlots = new RemoteClient[maxSlots];
 			this.encryptionManager = new EncryptionManager(maxSlots);
 
-			this.listenEndpoint = new IPEndPoint(IPAddress.Parse(address), port);
-            // TODO? this.listenEndpointV6 = new IPEndPoint(IPAddress.IPv6Any, port);
+			this.listenEndpoint = new IPEndPoint(IPAddress.Any, port);
+            this.listenEndpointV6 = new IPEndPoint(IPAddress.IPv6Any, port);
 
             this.listenSocket = socketContext;
 
@@ -273,7 +263,7 @@ namespace NetcodeIO.NET
 		public void Start(int tickHertz)
 		{
             Tickrate = tickHertz;
-			Start(true);
+			Start(autoTick: true);
 		}
 
         internal void Start(bool autoTick)
@@ -742,35 +732,10 @@ namespace NetcodeIO.NET
 				return;
 			}
 
-            // TODO if not development, probably want to remove the loopback/local support for security reasons
             ConnectTokenServerEntry[] clientServerList = privateConnectToken.ConnectServers;
             bool doesClientServerListIncludeThis = clientServerList.Any(x =>
-				// Check if the token's endpoint matches the IPv4 listen endpoint
-				(this.listenEndpoint.AddressFamily == AddressFamily.InterNetwork &&
-				 x.Endpoint.Address.Equals(listenEndpoint.Address)) ||
-
-				// Check if the token's endpoint matches the IPv6 listen endpoint
-				(this.listenEndpointV6.AddressFamily == AddressFamily.InterNetworkV6 &&
-				 x.Endpoint.Address.Equals(listenEndpointV6.Address)) ||
-
-				// General case for any IP address or hostname
-				(x.Endpoint.Address.ToString() == this.listenEndpoint.Address.ToString() ||
-				 x.Endpoint.Address.ToString() == this.listenEndpointV6.Address.ToString()) ||
-
-				// Special case for IPv6 loopback and any IPv4 address
-				(this.listenEndpointV6.Address.Equals(IPAddress.IPv6Any) &&
-				 (x.Endpoint.Address.Equals(IPAddress.IPv6Loopback) ||
-				  x.Endpoint.AddressFamily == AddressFamily.InterNetwork)) ||
-
-				// If the server is bound to IPv4 only, check for any IPv4
-				(this.listenEndpoint.Address.Equals(IPAddress.Any) &&
-				 x.Endpoint.AddressFamily == AddressFamily.InterNetwork) ||
-
-				// If the server is bound to IPv6 loopback, check for any IPv4 or IPv6
-				(this.listenEndpointV6.Address.Equals(IPAddress.IPv6Loopback) &&
-				 (x.Endpoint.Address.Equals(IPAddress.IPv6Loopback) ||
-				  x.Endpoint.AddressFamily == AddressFamily.InterNetwork))
-			);
+				NetworkUtils.DoEndpointsMatch(listenEndpoint, listenEndpointV6, x.Endpoint) ||
+                p2pEndPoints.Any(p2p => NetworkUtils.DoEndpointsMatch(p2p, x.Endpoint)));
 
             if (!doesClientServerListIncludeThis)
             {
@@ -842,12 +807,18 @@ namespace NetcodeIO.NET
             }
         }
 
-		#endregion
+		private readonly HashSet<IPEndPoint> p2pEndPoints = new();
+        internal void AddP2pEndPoint(IPEndPoint p2pEndPoint)
+        {
+            p2pEndPoints.Add(p2pEndPoint);
+        }
 
-		#region Send Packet Methods
+        #endregion
 
-		// disconnect all clients
-		private void disconnectAll()
+        #region Send Packet Methods
+
+        // disconnect all clients
+        private void disconnectAll()
 		{
 			for (int i = 0; i < clientSlots.Length; i++)
 			{
@@ -1196,6 +1167,6 @@ namespace NetcodeIO.NET
             }
         }
 
-		#endregion
-	}
+        #endregion
+    }
 }

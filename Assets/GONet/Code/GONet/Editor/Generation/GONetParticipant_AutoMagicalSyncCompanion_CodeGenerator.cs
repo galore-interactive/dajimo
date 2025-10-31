@@ -1,0 +1,1898 @@
+/* GONet (TM, serial number 88592370), Copyright (c) 2019-2023 Galore Interactive LLC - All Rights Reserved
+ * Unauthorized copying of this file, via any medium is strictly prohibited
+ * Proprietary and confidential, email: contactus@galoreinteractive.com
+ *
+ *
+ * Authorized use is explicitly limited to the following:
+ * -The ability to view and reference source code without changing it
+ * -The ability to enhance debugging with source code access
+ * -The ability to distribute products based on original sources for non-commercial purposes, whereas this license must be included if source code provided in said products
+ * -The ability to commercialize products built on original source code, whereas this license must be included if source code provided in said products and whereas the products are interactive multi-player video games and cannot be viewed as a product competitive to GONet
+ * -The ability to modify source code for local use only
+ * -The ability to distribute products based on modified sources for non-commercial purposes, whereas this license must be included if source code provided in said products
+ * -The ability to commercialize products built on modified source code, whereas this license must be included if source code provided in said products and whereas the products are interactive multi-player video games and cannot be viewed as a product competitive to GONet
+ */
+
+using System;
+using System.Globalization;
+using System.Text;
+using GONet.Generation;
+
+namespace GONet.Editor.Generation
+{
+    /// <summary>
+    /// Pure C# code generator that replaces the T4 template system for GONetParticipant AutoMagicalSync companion class generation.
+    /// This eliminates the dependency on Visual Studio's T4 engine and makes the code generation more maintainable.
+    /// </summary>
+    internal sealed class GONetParticipant_AutoMagicalSyncCompanion_CodeGenerator
+    {
+        private readonly GONetParticipant_ComponentsWithAutoSyncMembers uniqueEntry;
+        private readonly StringBuilder sb;
+        private readonly string className;
+
+        public string ClassName => className;
+
+        public GONetParticipant_AutoMagicalSyncCompanion_CodeGenerator(GONetParticipant_ComponentsWithAutoSyncMembers uniqueEntry)
+        {
+            this.uniqueEntry = uniqueEntry ?? throw new ArgumentNullException(nameof(uniqueEntry));
+            this.sb = new StringBuilder(50000); // Pre-allocate for large output
+            this.className = $"GONetParticipant_AutoMagicalSyncCompanion_Generated_{uniqueEntry.codeGenerationId}";
+        }
+
+        public string Generate()
+        {
+            sb.Clear();
+
+            WriteHeader();
+            WriteUsings();
+            WriteNamespaceAndClassDeclaration();
+            WriteComponentCachedProperties();
+            WriteCodeGenerationIdProperty();
+            WriteConstructor();
+            WriteSetAutoMagicalSyncValue();
+            WriteGetAutoMagicalSyncValue();
+            WriteSerializeAll();
+            WriteSerializeSingle();
+            WriteAreEqualQuantized();
+            WriteDeserializeInitAll();
+            WriteDeserializeInitSingle_ReadOnlyNotApply();
+            WriteDeserializeInitSingle(); // Synthesis wrapper (now simplified - no synthesis here)
+            // NOTE: Velocity synthesis handled by GONet.cs static method, not generated code
+            WriteInitSingle();
+            WriteUpdateLastKnownValues();
+            WriteIsLastKnownValue_VeryCloseTo_Or_AlreadyOutsideOf_QuantizationRange();
+            WriteCreateNewBaselineValueEvent();
+            WriteClassClose();
+
+            return sb.ToString();
+        }
+
+        private void WriteHeader()
+        {
+            sb.AppendLine("/* GONet (TM, serial number 88592370), Copyright (c) 2019-2023 Galore Interactive LLC - All Rights Reserved");
+            sb.AppendLine(" * Unauthorized copying of this file, via any medium is strictly prohibited");
+            sb.AppendLine(" * Proprietary and confidential, email: contactus@galoreinteractive.com");
+            sb.AppendLine(" * ");
+            sb.AppendLine(" *");
+            sb.AppendLine(" * Authorized use is explicitly limited to the following:\t");
+            sb.AppendLine(" * -The ability to view and reference source code without changing it");
+            sb.AppendLine(" * -The ability to enhance debugging with source code access");
+            sb.AppendLine(" * -The ability to distribute products based on original sources for non-commercial purposes, whereas this license must be included if source code provided in said products");
+            sb.AppendLine(" * -The ability to commercialize products built on original source code, whereas this license must be included if source code provided in said products and whereas the products are interactive multi-player video games and cannot be viewed as a product competitive to GONet");
+            sb.AppendLine(" * -The ability to modify source code for local use only");
+            sb.AppendLine(" * -The ability to distribute products based on modified sources for non-commercial purposes, whereas this license must be included if source code provided in said products");
+            sb.AppendLine(" * -The ability to commercialize products built on modified source code, whereas this license must be included if source code provided in said products and whereas the products are interactive multi-player video games and cannot be viewed as a product competitive to GONet");
+            sb.AppendLine(" */");
+            sb.AppendLine();
+        }
+
+        private void WriteUsings()
+        {
+            sb.AppendLine("using System;");
+            sb.AppendLine("using System.IO;");
+            sb.AppendLine("using System.Linq;");
+            sb.AppendLine("using System.Text;");
+            sb.AppendLine("using UnityEngine;");
+            sb.AppendLine("using GONet;");
+            sb.AppendLine();
+        }
+
+        private void WriteNamespaceAndClassDeclaration()
+        {
+            sb.AppendLine("namespace GONet.Generation");
+            sb.AppendLine("{");
+            sb.Append("\tinternal sealed class ").Append(className).AppendLine(" : GONetParticipant_AutoMagicalSyncCompanion_Generated");
+            sb.AppendLine("    {");
+        }
+
+        private void WriteComponentCachedProperties()
+        {
+            int singleCount = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName.Length;
+            for (int iSingle = 0; iSingle < singleCount; ++iSingle)
+            {
+                GONetParticipant_ComponentsWithAutoSyncMembers_Single single = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName[iSingle];
+
+                sb.Append("\t\tprivate ").Append(single.componentTypeFullName).Append(" _").Append(single.componentTypeName).AppendLine(";");
+                sb.Append("\t\tinternal ").Append(single.componentTypeFullName).Append(" ").AppendLine(single.componentTypeName);
+                sb.AppendLine("\t\t{");
+                sb.AppendLine("\t\t\tget");
+                sb.AppendLine("\t\t\t{");
+                sb.Append("\t\t\t\tif ((object)_").Append(single.componentTypeName).AppendLine(" == null)");
+                sb.AppendLine("\t\t\t\t{");
+                sb.Append("\t\t\t\t\t_").Append(single.componentTypeName).Append(" = gonetParticipant.GetComponent<").Append(single.componentTypeFullName).AppendLine(">();");
+                sb.AppendLine("\t\t\t\t}");
+                sb.Append("\t\t\t\treturn _").Append(single.componentTypeName).AppendLine(";");
+                sb.AppendLine("\t\t\t}");
+                sb.AppendLine("\t\t}");
+                sb.AppendLine();
+            }
+
+            // PHYSICS TIMING: Add class field for physics check (initialized once in constructor, used everywhere)
+            // Check if we have any rigidbody-aware members (Transform.position or Transform.rotation)
+            bool hasRigidbodyAwareMembers = false;
+            for (int iSingle = 0; iSingle < singleCount; ++iSingle)
+            {
+                GONetParticipant_ComponentsWithAutoSyncMembers_Single single = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName[iSingle];
+                if (single.componentTypeName == "Transform")
+                {
+                    int singleMemberCount = single.autoSyncMembers.Length;
+                    for (int iSingleMember = 0; iSingleMember < singleMemberCount; ++iSingleMember)
+                    {
+                        GONetParticipant_ComponentsWithAutoSyncMembers_SingleMember singleMember = single.autoSyncMembers[iSingleMember];
+                        if (singleMember.memberName == "position" || singleMember.memberName == "rotation")
+                        {
+                            hasRigidbodyAwareMembers = true;
+                            break;
+                        }
+                    }
+                }
+                if (hasRigidbodyAwareMembers) break;
+            }
+
+            if (hasRigidbodyAwareMembers)
+            {
+                sb.AppendLine("\t\t/// <summary>");
+                sb.AppendLine("\t\t/// PHYSICS TIMING: Cached physics check for Transform.position/rotation time source selection.");
+                sb.AppendLine("\t\t/// Initialized once in constructor based on gonetParticipant.IsRigidBodyOwnerOnlyControlled.");
+                sb.AppendLine("\t\t/// NOTE: Changing IsRigidBodyOwnerOnlyControlled at runtime will NOT update this cached value!");
+                sb.AppendLine("\t\t/// This is an optimization to avoid redundant checks in constructor and UpdateLastKnownValues hot paths.");
+                sb.AppendLine("\t\t/// </summary>");
+                sb.AppendLine("\t\tprivate readonly bool shouldSourceFromRigidbody;");
+                sb.AppendLine();
+            }
+        }
+
+        private void WriteCodeGenerationIdProperty()
+        {
+            sb.Append("        internal override byte CodeGenerationId => ").Append(uniqueEntry.codeGenerationId).AppendLine(";");
+            sb.AppendLine();
+        }
+
+        private void WriteConstructor()
+        {
+            int overallCount = 0;
+            Array.ForEach(uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName, uE => overallCount += uE.autoSyncMembers.Length);
+
+            sb.Append("        internal ").Append(className).AppendLine("(GONetParticipant gonetParticipant) : base(gonetParticipant)");
+            sb.AppendLine("\t\t{");
+            sb.Append("\t\t\tvaluesCount = ").Append(overallCount).AppendLine(";");
+            sb.AppendLine("\t\t\t");
+            sb.AppendLine("\t\t\tcachedCustomSerializers = cachedCustomSerializersArrayPool.Borrow((int)valuesCount);");
+            sb.AppendLine("\t\t\tcachedValueSerializers = cachedCustomSerializersArrayPool.Borrow((int)valuesCount);");
+            sb.AppendLine("\t\t\tcachedVelocitySerializers = cachedCustomSerializersArrayPool.Borrow((int)valuesCount);");
+            sb.AppendLine("\t\t\tcachedCustomValueBlendings = cachedCustomValueBlendingsArrayPool.Borrow((int)valuesCount);");
+            sb.AppendLine("\t\t\tcachedCustomVelocityBlendings = cachedCustomVelocityBlendingsArrayPool.Borrow((int)valuesCount);");
+            sb.AppendLine();
+            sb.AppendLine("\t\t\t// Velocity-augmented sync: Allocate syncCounter for per-value velocity frequency tracking");
+            sb.AppendLine("\t\t\tsyncCounter = syncCounterArrayPool.Borrow((int)valuesCount);");
+            sb.AppendLine("\t\t\tArray.Clear(syncCounter, 0, syncCounter.Length); // Start at 0 for all values");
+            sb.AppendLine("\t\t    ");
+            sb.AppendLine("\t\t\tlastKnownValueChangesSinceLastCheck = lastKnownValuesChangedArrayPool.Borrow((int)valuesCount);");
+            sb.AppendLine("\t\t\tArray.Clear(lastKnownValueChangesSinceLastCheck, 0, lastKnownValueChangesSinceLastCheck.Length);");
+            sb.AppendLine();
+            sb.AppendLine("\t\t\tlastKnownValueAtRestBits = lastKnownValueAtRestBitsArrayPool.Borrow((int)valuesCount);");
+            sb.AppendLine("\t\t\tlastKnownValueChangedAtElapsedTicks = lastKnownValueChangedAtElapsedTicksArrayPool.Borrow((int)valuesCount);");
+            sb.AppendLine("\t\t\tfor (int i = 0; i < (int)valuesCount; ++i)");
+            sb.AppendLine("\t\t\t{");
+            sb.AppendLine("\t\t\t\tlastKnownValueAtRestBits[i] = LAST_KNOWN_VALUE_IS_AT_REST_ALREADY_BROADCASTED; // when things start consider things at rest and alreayd broadcast as to avoid trying to broadcast at rest too early in the beginning");
+            sb.AppendLine("\t\t\t\tlastKnownValueChangedAtElapsedTicks[i] = long.MaxValue; // want to start high so the subtraction from actual game time later on does not yield a high value on first times before set with a proper/real value of last change...which would cause an unwanted false positive");
+            sb.AppendLine("\t\t\t}");
+            sb.AppendLine("\t\t\t");
+            sb.AppendLine("            doesBaselineValueNeedAdjusting = doesBaselineValueNeedAdjustingArrayPool.Borrow((int)valuesCount);");
+            sb.AppendLine("            Array.Clear(doesBaselineValueNeedAdjusting, 0, doesBaselineValueNeedAdjusting.Length);");
+            sb.AppendLine();
+            sb.AppendLine("\t\t\tvaluesChangesSupport = valuesChangesSupportArrayPool.Borrow((int)valuesCount);");
+            sb.AppendLine("\t\t\t");
+
+            WriteConstructorBody();
+
+            sb.AppendLine("\t\t}");
+            sb.AppendLine();
+        }
+
+        private void WriteConstructorBody()
+        {
+            // VELOCITY FIX: Check if we have any rigidbody-aware members (Transform.position or Transform.rotation)
+            // If so, initialize shouldSourceFromRigidbody class field once at the beginning
+            bool hasRigidbodyAwareMembers = false;
+            int singleCount = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName.Length;
+            for (int iSingle = 0; iSingle < singleCount; ++iSingle)
+            {
+                GONetParticipant_ComponentsWithAutoSyncMembers_Single single = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName[iSingle];
+                if (single.componentTypeName == "Transform")
+                {
+                    int singleMemberCount = single.autoSyncMembers.Length;
+                    for (int iSingleMember = 0; iSingleMember < singleMemberCount; ++iSingleMember)
+                    {
+                        GONetParticipant_ComponentsWithAutoSyncMembers_SingleMember singleMember = single.autoSyncMembers[iSingleMember];
+                        if (singleMember.memberName == "position" || singleMember.memberName == "rotation")
+                        {
+                            hasRigidbodyAwareMembers = true;
+                            break;
+                        }
+                    }
+                }
+                if (hasRigidbodyAwareMembers) break;
+            }
+
+            // Initialize shouldSourceFromRigidbody class field if needed
+            if (hasRigidbodyAwareMembers)
+            {
+                sb.AppendLine("\t\t\t// PHYSICS TIMING: Initialize class field for physics timing (used in constructor and UpdateLastKnownValues)");
+                sb.AppendLine("\t\t\t// CRITICAL: myRigidBody is not set until GONetParticipant.Start(), so we need to do the lookup ourselves");
+                sb.AppendLine("\t\t\tif (gonetParticipant.myRigidBody == null)");
+                sb.AppendLine("\t\t\t{");
+                sb.AppendLine("\t\t\t\tgonetParticipant.myRigidBody = gonetParticipant.GetComponent<UnityEngine.Rigidbody>();");
+                sb.AppendLine("\t\t\t}");
+                sb.AppendLine("\t\t\tshouldSourceFromRigidbody = gonetParticipant.IsRigidBodyOwnerOnlyControlled && gonetParticipant.myRigidBody != null;");
+                sb.AppendLine();
+            }
+
+            int iOverall = 0;
+            for (int iSingle = 0; iSingle < singleCount; ++iSingle)
+            {
+                GONetParticipant_ComponentsWithAutoSyncMembers_Single single = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName[iSingle];
+                int singleMemberCount = single.autoSyncMembers.Length;
+                for (int iSingleMember = 0; iSingleMember < singleMemberCount; ++iSingleMember)
+                {
+                    GONetParticipant_ComponentsWithAutoSyncMembers_SingleMember singleMember = single.autoSyncMembers[iSingleMember];
+
+                    sb.Append("\t\t\tvar support").Append(iOverall).Append(" = valuesChangesSupport[").Append(iOverall).AppendLine("] = valueChangeSupportArrayPool.Borrow();");
+
+                    if (singleMember.animatorControllerParameterId == 0)
+                    {
+                        WriteConstructorMemberInit(iOverall, single, singleMember, singleMember.memberTypeFullName, $"{single.componentTypeName}.{singleMember.memberName}");
+                    }
+                    else
+                    {
+                        string animatorGetter = $"{single.componentTypeName}.Get{singleMember.animatorControllerParameterMethodSuffix}({singleMember.animatorControllerParameterId})";
+                        WriteConstructorMemberInit(iOverall, single, singleMember, singleMember.animatorControllerParameterTypeFullName, animatorGetter);
+                    }
+
+                    sb.Append("\t\t\tsupport").Append(iOverall).AppendLine(".syncCompanion = this;");
+                    sb.Append("\t\t\tsupport").Append(iOverall).Append(".memberName = \"").Append(singleMember.memberName).AppendLine("\";");
+                    sb.Append("\t\t\tsupport").Append(iOverall).Append(".index = ").Append(iOverall).AppendLine(";");
+                    sb.Append("\t\t\tsupport").Append(iOverall).Append(".syncAttribute_MustRunOnUnityMainThread = ").Append(singleMember.attribute.MustRunOnUnityMainThread ? "true" : "false").AppendLine(";");
+                    sb.Append("\t\t\tsupport").Append(iOverall).Append(".syncAttribute_ProcessingPriority = ").Append(singleMember.attribute.ProcessingPriority).AppendLine(";");
+                    sb.Append("\t\t\tsupport").Append(iOverall).Append(".syncAttribute_ProcessingPriority_GONetInternalOverride = ").Append(singleMember.attribute.ProcessingPriority_GONetInternalOverride).AppendLine(";");
+                    sb.Append("\t\t\tsupport").Append(iOverall).Append(".syncAttribute_SyncChangesEverySeconds = ").Append(singleMember.attribute.SyncChangesEverySeconds).AppendLine("f;");
+                    sb.Append("\t\t\tsupport").Append(iOverall).Append(".syncAttribute_Reliability = AutoMagicalSyncReliability.").Append(singleMember.attribute.Reliability).AppendLine(";");
+                    sb.Append("\t\t\tsupport").Append(iOverall).Append(".syncAttribute_ShouldBlendBetweenValuesReceived = ").Append(singleMember.attribute.ShouldBlendBetweenValuesReceived ? "true" : "false").AppendLine(";");
+                    sb.Append("\t\t\tsupport").Append(iOverall).Append(".syncAttribute_PhysicsUpdateInterval = ").Append(singleMember.attribute.PhysicsUpdateInterval).AppendLine(";");
+                    sb.Append("\t\t\tsupport").Append(iOverall).Append(".syncAttribute_EnablePhysicsSnapping = ").Append(singleMember.attribute.EnablePhysicsSnapping ? "true" : "false").AppendLine(";");
+
+                    // VELOCITY-AUGMENTED SYNC: Initialize velocity tracking fields
+                    sb.Append("\t\t\tsupport").Append(iOverall).Append(".isVelocityEligible = ").Append(singleMember.attribute.IsVelocityEligible ? "true" : "false").AppendLine(";");
+
+                    // VELOCITY-AUGMENTED SYNC: Determine which velocity quantization bounds to use
+                    // Way 1 (Dynamic): Defaults [-20, 20, 10] → Calculate from VALUE precision
+                    // Way 2 (Manual): Custom values → Use directly from sync profile
+                    string velocityLowerBoundForRuntimeFields;
+                    string velocityUpperBoundForRuntimeFields;
+
+                    // Check if user wants manual velocity configuration (via boolean flag, not magic values)
+                    bool shouldAutoCalculateForRuntimeFields = singleMember.attribute.AutoCalculateVelocityQuantization;
+
+                    if (!shouldAutoCalculateForRuntimeFields)
+                    {
+                        // Way 2: Use manual settings from sync profile
+                        velocityLowerBoundForRuntimeFields = singleMember.attribute.VelocityQuantizeLowerBound.ToString(CultureInfo.InvariantCulture) + "f";
+                        velocityUpperBoundForRuntimeFields = singleMember.attribute.VelocityQuantizeUpperBound.ToString(CultureInfo.InvariantCulture) + "f";
+                    }
+                    else
+                    {
+                        // Way 1: Calculate dynamic bounds from VALUE quantization precision
+                        // This must match the calculation done below for the velocity serializer (lines 277-283)
+
+                        var (velLowerBoundCalc, velUpperBoundCalc, velBitCountCalc) = CalculateVelocityQuantizationSettings(
+                            singleMember.attribute.QuantizeLowerBound,
+                            singleMember.attribute.QuantizeUpperBound,
+                            singleMember.attribute.QuantizeDownToBitCount,
+                            singleMember.attribute.SyncChangesEverySeconds,
+                            singleMember.attribute.PhysicsUpdateInterval,
+                            singleMember.memberTypeFullName == typeof(UnityEngine.Quaternion).FullName);
+
+                        velocityLowerBoundForRuntimeFields = velLowerBoundCalc == float.MinValue ? "float.MinValue" : velLowerBoundCalc.ToString("F6", CultureInfo.InvariantCulture) + "f";
+                        velocityUpperBoundForRuntimeFields = velUpperBoundCalc == float.MaxValue ? "float.MaxValue" : velUpperBoundCalc.ToString("F6", CultureInfo.InvariantCulture) + "f";
+                    }
+
+                    sb.Append("\t\t\tsupport").Append(iOverall).Append(".syncAttribute_VelocityQuantizeLowerBound = ").Append(velocityLowerBoundForRuntimeFields).AppendLine(";");
+                    sb.Append("\t\t\tsupport").Append(iOverall).Append(".syncAttribute_VelocityQuantizeUpperBound = ").Append(velocityUpperBoundForRuntimeFields).AppendLine(";");
+                    sb.Append("\t\t\tsupport").Append(iOverall).Append(".syncAttribute_VelocityAnchorIntervalSeconds = ").Append(singleMember.attribute.VelocityAnchorIntervalSeconds.ToString("F1", CultureInfo.InvariantCulture)).AppendLine("f;");
+
+                    // OPTIMIZATION: Pre-calculate per-sync-interval bounds for efficient runtime checks
+                    // Convert from value-units/second to value-units-per-sync-interval
+                    // This eliminates division in hot path (range checking happens every VELOCITY frame)
+                    //
+                    // CRITICAL FIX (Oct 2025): Runtime detection of physics vs non-physics objects
+                    // The effective sync interval depends on which pipeline the object uses:
+                    //
+                    // Pipeline 1 (Non-Physics, LateUpdate):
+                    //   - Objects without IsRigidBodyOwnerOnlyControlled
+                    //   - Sync interval = SyncChangesEverySeconds (e.g., 24 Hz = 0.04167s)
+                    //   - PhysicsUpdateInterval IGNORED
+                    //
+                    // Pipeline 2 (Physics, FixedUpdate):
+                    //   - Rigidbody with IsRigidBodyOwnerOnlyControlled=true
+                    //   - Sync interval = fixedDeltaTime * PhysicsUpdateInterval (e.g., 0.02s * 3 = 0.06s)
+                    //   - Gating mechanism in GONet.cs:2261-2303
+                    //
+                    // We must calculate bounds based on the ACTUAL runtime sync interval!
+                    sb.Append("\t\t\t// Runtime detection: Use physics-gated interval for physics objects, configured interval otherwise\n");
+                    sb.Append("\t\t\tbool support").Append(iOverall).Append("_isPhysicsObject = gonetParticipant.IsRigidBodyOwnerOnlyControlled && gonetParticipant.myRigidBody != null;\n");
+                    sb.Append("\t\t\tfloat support").Append(iOverall).Append("_effectiveSyncInterval = support").Append(iOverall).Append("_isPhysicsObject && support").Append(iOverall).Append(".syncAttribute_PhysicsUpdateInterval > 0\n");
+                    sb.Append("\t\t\t\t? UnityEngine.Time.fixedDeltaTime * support").Append(iOverall).Append(".syncAttribute_PhysicsUpdateInterval\n");
+                    sb.Append("\t\t\t\t: support").Append(iOverall).Append(".syncAttribute_SyncChangesEverySeconds;\n");
+                    sb.Append("\t\t\tsupport").Append(iOverall).Append(".velocityQuantizeLowerBound_PerSyncInterval = support").Append(iOverall).Append(".syncAttribute_VelocityQuantizeLowerBound * support").Append(iOverall).AppendLine("_effectiveSyncInterval;");
+                    sb.Append("\t\t\tsupport").Append(iOverall).Append(".velocityQuantizeUpperBound_PerSyncInterval = support").Append(iOverall).Append(".syncAttribute_VelocityQuantizeUpperBound * support").Append(iOverall).AppendLine("_effectiveSyncInterval;");
+
+                    // Initialize lastVelocityTimestamp to current time to prevent false "EXPIRED" on first VALUE bundle
+                    // (uninitialized = 0 → age = currentTime - 0 = HUGE → immediate expiration)
+                    sb.Append("\t\t\tsupport").Append(iOverall).AppendLine(".lastVelocityTimestamp = GONet.GONetMain.Time.ElapsedTicks;");
+                    // Store member type as enum for velocity calculations
+                    string memberTypeEnum = singleMember.memberTypeFullName.Replace(".", "_");
+                    sb.Append("\t\t\tsupport").Append(iOverall).Append(".codeGenerationMemberType = GONetSyncableValueTypes.").Append(memberTypeEnum).AppendLine(";");
+
+                    // Check if this is Transform.position or Transform.rotation - needs special ShouldSkipSync handling
+                    bool isTransformPosition = single.componentTypeFullName == "UnityEngine.Transform" && singleMember.memberName == "position";
+                    bool isTransformRotation = single.componentTypeFullName == "UnityEngine.Transform" && singleMember.memberName == "rotation";
+
+                    if (isTransformRotation)
+                    {
+                        sb.Append("\t\t\tsupport").Append(iOverall).AppendLine(".syncAttribute_ShouldSkipSync = GONetMain.IsRotationNotSyncd;");
+                    }
+                    else if (isTransformPosition)
+                    {
+                        sb.Append("\t\t\tsupport").Append(iOverall).AppendLine(".syncAttribute_ShouldSkipSync = GONetMain.IsPositionNotSyncd;");
+                    }
+
+                    sb.Append("\t\t\t// TODO have to revisit this at some point to get animator parameters working: GONet.GONetAutoMagicalSyncAttribute.ShouldSkipSyncByRegistrationIdMap.TryGetValue((").Append(uniqueEntry.codeGenerationId).Append(", ").Append(iOverall).Append("), out support").Append(iOverall).AppendLine(".syncAttribute_ShouldSkipSync);");
+
+                    string lowerBound = singleMember.attribute.QuantizeLowerBound == float.MinValue ? "float.MinValue" : singleMember.attribute.QuantizeLowerBound.ToString(CultureInfo.InvariantCulture) + "f";
+                    string upperBound = singleMember.attribute.QuantizeUpperBound == float.MaxValue ? "float.MaxValue" : singleMember.attribute.QuantizeUpperBound.ToString(CultureInfo.InvariantCulture) + "f";
+                    sb.Append("\t\t\tsupport").Append(iOverall).Append(".syncAttribute_QuantizerSettingsGroup = new GONet.Utils.QuantizerSettingsGroup(").Append(lowerBound).Append(", ").Append(upperBound).Append(", ").Append(singleMember.attribute.QuantizeDownToBitCount).AppendLine(", true);");
+                    sb.AppendLine();
+
+                    if (singleMember.attribute.CustomSerialize_Instance != null)
+                    {
+                        // Initialize legacy cachedCustomSerializers for backward compatibility
+                        sb.Append("\t\t\tcachedCustomSerializers[").Append(iOverall).Append("] = GONetAutoMagicalSyncAttribute.GetCustomSerializer<").Append(singleMember.attribute.CustomSerialize_Instance.GetType().FullName.Replace("+", ".")).Append(">(").Append(singleMember.attribute.QuantizeDownToBitCount).Append(", ").Append(singleMember.attribute.QuantizeLowerBound.ToString(CultureInfo.InvariantCulture)).Append("f, ").Append(singleMember.attribute.QuantizeUpperBound.ToString(CultureInfo.InvariantCulture)).AppendLine("f);");
+
+                        // Velocity-augmented sync: Initialize VALUE serializer (same quantization as legacy for now)
+                        sb.Append("\t\t\tcachedValueSerializers[").Append(iOverall).Append("] = GONetAutoMagicalSyncAttribute.GetCustomSerializer<").Append(singleMember.attribute.CustomSerialize_Instance.GetType().FullName.Replace("+", ".")).Append(">(").Append(singleMember.attribute.QuantizeDownToBitCount).Append(", ").Append(singleMember.attribute.QuantizeLowerBound.ToString(CultureInfo.InvariantCulture)).Append("f, ").Append(singleMember.attribute.QuantizeUpperBound.ToString(CultureInfo.InvariantCulture)).AppendLine("f);");
+
+                        // Velocity-augmented sync: Initialize VELOCITY serializer
+                        // Use manual velocity settings if configured, otherwise calculate dynamically
+                        string velBitCount;
+                        string velLowerBound;
+                        string velUpperBound;
+
+                        // Check if user wants manual velocity configuration (via boolean flag, not magic values)
+                        bool shouldAutoCalculate = singleMember.attribute.AutoCalculateVelocityQuantization;
+
+                        if (!shouldAutoCalculate)
+                        {
+                            // Use manually configured velocity quantization settings
+                            velBitCount = singleMember.attribute.VelocityQuantizeDownToBitCount.ToString();
+                            velLowerBound = singleMember.attribute.VelocityQuantizeLowerBound == float.MinValue ? "float.MinValue" : singleMember.attribute.VelocityQuantizeLowerBound.ToString(CultureInfo.InvariantCulture) + "f";
+                            velUpperBound = singleMember.attribute.VelocityQuantizeUpperBound == float.MaxValue ? "float.MaxValue" : singleMember.attribute.VelocityQuantizeUpperBound.ToString(CultureInfo.InvariantCulture) + "f";
+                        }
+                        else
+                        {
+                            // Calculate velocity range dynamically from VALUE quantization precision (for sub-quantization motion)
+                            var (velLowerBoundCalc, velUpperBoundCalc, velBitCountCalc) = CalculateVelocityQuantizationSettings(
+                                singleMember.attribute.QuantizeLowerBound,
+                                singleMember.attribute.QuantizeUpperBound,
+                                singleMember.attribute.QuantizeDownToBitCount,
+                                singleMember.attribute.SyncChangesEverySeconds,
+                                singleMember.attribute.PhysicsUpdateInterval,
+                                singleMember.memberTypeFullName == typeof(UnityEngine.Quaternion).FullName);
+
+                            velBitCount = velBitCountCalc.ToString();
+                            velLowerBound = velLowerBoundCalc == float.MinValue ? "float.MinValue" : velLowerBoundCalc.ToString("F6", CultureInfo.InvariantCulture) + "f";
+                            velUpperBound = velUpperBoundCalc == float.MaxValue ? "float.MaxValue" : velUpperBoundCalc.ToString("F6", CultureInfo.InvariantCulture) + "f";
+                        }
+
+                        // CRITICAL: Quaternion angular velocity uses Vector3Serializer (not QuaternionSerializer!)
+                        string velocitySerializerType = singleMember.memberTypeFullName == typeof(UnityEngine.Quaternion).FullName
+                            ? "GONet.Vector3Serializer"
+                            : singleMember.attribute.CustomSerialize_Instance.GetType().FullName.Replace("+", ".");
+
+                        sb.Append("\t\t\tcachedVelocitySerializers[").Append(iOverall).Append("] = GONetAutoMagicalSyncAttribute.GetCustomSerializer<").Append(velocitySerializerType).Append(">(").Append(velBitCount).Append(", ").Append(velLowerBound).Append(", ").Append(velUpperBound).AppendLine(");");
+                        sb.AppendLine();
+                    }
+                    if (singleMember.attribute.CustomValueBlending_Instance != null)
+                    {
+                        sb.Append("\t\t\tcachedCustomValueBlendings[").Append(iOverall).Append("] = GONetAutoMagicalSyncAttribute.GetCustomValueBlending<").Append(singleMember.attribute.CustomValueBlending_Instance.GetType().FullName.Replace("+", ".")).AppendLine(">();");
+                    }
+
+                    // Velocity blending: Populate with default implementations from ValueBlendUtils
+                    // Only for velocity-capable types (float, Vector2/3/4, Quaternion) that use value blending
+                    if (singleMember.attribute.ShouldBlendBetweenValuesReceived && IsVelocityCapableType(singleMember.memberTypeFullName))
+                    {
+                        sb.Append("\t\t\tcachedCustomVelocityBlendings[").Append(iOverall).AppendLine("] = GONet.Utils.ValueBlendUtils.GetDefaultVelocityBlending(support" + iOverall + ".lastKnownValue.GONetSyncType);");
+                    }
+
+                    if (singleMember.attribute.ShouldBlendBetweenValuesReceived)
+                    {
+                        sb.Append("            int support").Append(iOverall).Append("_mostRecentChanges_calcdSize = support").Append(iOverall).Append(".syncAttribute_SyncChangesEverySeconds != 0 ? (int)((GONetMain.valueBlendingBufferLeadSeconds / support").Append(iOverall).AppendLine(".syncAttribute_SyncChangesEverySeconds) * 2.5f) : 0;");
+                        sb.Append("            support").Append(iOverall).Append(".mostRecentChanges_capacitySize = Math.Max(support").Append(iOverall).AppendLine("_mostRecentChanges_calcdSize, GONetMain.AutoMagicalSync_ValueMonitoringSupport_ChangedValue.MOST_RECENT_CHANGEs_SIZE_MINIMUM);");
+                        sb.Append("\t\t\tsupport").Append(iOverall).Append(".mostRecentChanges = GONetMain.AutoMagicalSync_ValueMonitoringSupport_ChangedValue.mostRecentChangesPool.Borrow(support").Append(iOverall).AppendLine(".mostRecentChanges_capacitySize);");
+                    }
+                    sb.AppendLine();
+
+                    iOverall++;
+                }
+            }
+        }
+
+        private void WriteConstructorMemberInit(int iOverall, GONetParticipant_ComponentsWithAutoSyncMembers_Single single, GONetParticipant_ComponentsWithAutoSyncMembers_SingleMember singleMember, string typeFullName, string valueExpression)
+        {
+            string fieldName = typeFullName.Replace(".", "_");
+            sb.Append("            support").Append(iOverall).Append(".baselineValue_current.").Append(fieldName).Append(" = ").Append(valueExpression).AppendLine("; // IMPORTANT: The use of the property here (i.e., prior to use anywhere herein after) ensures GetComponnet<T>() called up front and that component is cached and available subsequently as needed/referenced/used");
+            sb.Append("            support").Append(iOverall).Append(".lastKnownValue.").Append(fieldName).Append(" = ").Append(valueExpression).AppendLine("; // IMPORTANT: The use of the property here (i.e., prior to use anywhere herein after) ensures GetComponnet<T>() called up front and that component is cached and available subsequently as needed/referenced/used");
+
+            sb.Append("            support").Append(iOverall).Append(".lastKnownValue_previous.").Append(fieldName).Append(" = ").Append(valueExpression).AppendLine("; // IMPORTANT: same as above PLUS capturing the initial value now as the previous will ensure we do not accumulate changes during first pass \"has anything changed\" checks, which caused some problems before putting this in because things run in different threads and this is appropriate!");
+            sb.Append("\t\t\tsupport").Append(iOverall).Append(".valueLimitEncountered_min.").Append(fieldName).Append(" = ").Append(valueExpression).AppendLine("; ");
+            sb.Append("\t\t\tsupport").Append(iOverall).Append(".valueLimitEncountered_max.").Append(fieldName).Append(" = ").Append(valueExpression).AppendLine("; ");
+
+            // VELOCITY FIX: Initialize timestamp fields
+            // Determine if this is a rigidbody-aware member (Transform.position or Transform.rotation)
+            bool isTransformComponent = single.componentTypeName == "Transform";
+            bool isPositionMember = singleMember.memberName == "position";
+            bool isRotationMember = singleMember.memberName == "rotation";
+            bool isRigidbodyAwareMember = isTransformComponent && (isPositionMember || isRotationMember);
+
+            // CRITICAL: ONLY position/rotation are physics-aware, everything else uses ElapsedTicks
+            // Initialize both timestamp fields to current time (since current and previous are same at initialization)
+            if (isRigidbodyAwareMember)
+            {
+                // For position/rotation: Use shouldSourceFromRigidbody variable declared at constructor level
+                sb.Append("\t\t\tsupport").Append(iOverall).AppendLine(".lastKnownValue_elapsedTicks = shouldSourceFromRigidbody ? GONetMain.Time.FixedElapsedTicks : GONetMain.Time.ElapsedTicks; // Initialize current timestamp");
+                sb.Append("\t\t\tsupport").Append(iOverall).AppendLine(".lastKnownValue_previous_elapsedTicks = shouldSourceFromRigidbody ? GONetMain.Time.FixedElapsedTicks : GONetMain.Time.ElapsedTicks; // Initialize previous timestamp (same as current at initialization)");
+            }
+            else
+            {
+                // For all other members: ALWAYS ElapsedTicks (non-physics)
+                sb.Append("\t\t\tsupport").Append(iOverall).AppendLine(".lastKnownValue_elapsedTicks = GONetMain.Time.ElapsedTicks; // Initialize current timestamp");
+                sb.Append("\t\t\tsupport").Append(iOverall).AppendLine(".lastKnownValue_previous_elapsedTicks = GONetMain.Time.ElapsedTicks; // Initialize previous timestamp (same as current at initialization)");
+            }
+        }
+
+        private void WriteSetAutoMagicalSyncValue()
+        {
+            sb.AppendLine("        internal override void SetAutoMagicalSyncValue(byte index, GONetSyncableValue value)");
+            sb.AppendLine("\t\t{");
+            sb.AppendLine("\t\t\tswitch (index)");
+            sb.AppendLine("\t\t\t{");
+
+            int iOverall = 0;
+            int singleCount = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName.Length;
+            for (int iSingle = 0; iSingle < singleCount; ++iSingle)
+            {
+                GONetParticipant_ComponentsWithAutoSyncMembers_Single single = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName[iSingle];
+                int singleMemberCount = single.autoSyncMembers.Length;
+                for (int iSingleMember = 0; iSingleMember < singleMemberCount; ++iSingleMember)
+                {
+                    GONetParticipant_ComponentsWithAutoSyncMembers_SingleMember singleMember = single.autoSyncMembers[iSingleMember];
+
+                    sb.Append("\t\t\t\tcase ").Append(iOverall++).AppendLine(":");
+                    if (singleMember.animatorControllerParameterId == 0)
+                    {
+                        sb.Append("\t\t\t\t\t").Append(single.componentTypeName).Append(".").Append(singleMember.memberName).Append(" = value.").Append(singleMember.memberTypeFullName.Replace(".", "_")).AppendLine(";");
+                    }
+                    else
+                    {
+                        sb.Append("\t\t\t\t\t").Append(single.componentTypeName).Append(".Set").Append(singleMember.animatorControllerParameterMethodSuffix).Append("(").Append(singleMember.animatorControllerParameterId).Append(", value.").Append(singleMember.animatorControllerParameterTypeFullName.Replace(".", "_")).AppendLine(");");
+                    }
+                    sb.AppendLine("\t\t\t\t\treturn;");
+                }
+            }
+
+            sb.AppendLine("\t\t\t}");
+            sb.AppendLine("\t\t}");
+            sb.AppendLine();
+        }
+
+        private void WriteGetAutoMagicalSyncValue()
+        {
+            sb.AppendLine("        internal override GONetSyncableValue GetAutoMagicalSyncValue(byte index)");
+            sb.AppendLine("\t\t{");
+            sb.AppendLine("\t\t\tswitch (index)");
+            sb.AppendLine("\t\t\t{");
+
+            int iOverall = 0;
+            int singleCount = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName.Length;
+            for (int iSingle = 0; iSingle < singleCount; ++iSingle)
+            {
+                GONetParticipant_ComponentsWithAutoSyncMembers_Single single = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName[iSingle];
+                int singleMemberCount = single.autoSyncMembers.Length;
+                for (int iSingleMember = 0; iSingleMember < singleMemberCount; ++iSingleMember)
+                {
+                    GONetParticipant_ComponentsWithAutoSyncMembers_SingleMember singleMember = single.autoSyncMembers[iSingleMember];
+
+                    sb.Append("\t\t\t\tcase ").Append(iOverall++).AppendLine(":");
+                    if (singleMember.animatorControllerParameterId == 0)
+                    {
+                        sb.Append("\t\t\t\t\treturn ").Append(single.componentTypeName).Append(".").Append(singleMember.memberName).AppendLine(";");
+                    }
+                    else
+                    {
+                        sb.Append("\t\t\t\t\treturn ").Append(single.componentTypeName).Append(".Get").Append(singleMember.animatorControllerParameterMethodSuffix).Append("(").Append(singleMember.animatorControllerParameterId).AppendLine(");");
+                    }
+                }
+            }
+
+            sb.AppendLine("\t\t\t}");
+            sb.AppendLine();
+            sb.AppendLine("\t\t\treturn default;");
+            sb.AppendLine("\t\t}");
+            sb.AppendLine();
+        }
+
+        private void WriteSerializeAll()
+        {
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine("        /// Serializes all values of appropriaate member variables internally to <paramref name=\"bitStream_appendTo\"/>.");
+            sb.AppendLine("        /// Oops.  Just kidding....it's ALMOST all values.  The exception being <see cref=\"GONetParticipant.GONetId\"/> because that has to be processed first separately in order");
+            sb.AppendLine("        /// to know which <see cref=\"GONetParticipant\"/> we are working with in order to call this method.");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        internal override void SerializeAll(Utils.BitByBitByteArrayBuilder bitStream_appendTo)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            // SerializeAll is INIT ONLY - always send VALUES (no velocity data during initial sync)");
+            sb.AppendLine();
+
+            WriteSerializationBody(true);
+
+            sb.AppendLine("        }");
+            sb.AppendLine();
+        }
+
+        private void WriteSerializeSingle()
+        {
+            sb.AppendLine("        internal override void SerializeSingle(Utils.BitByBitByteArrayBuilder bitStream_appendTo, byte singleIndex, bool isVelocityBundle = false)");
+            sb.AppendLine("        {");
+            sb.AppendLine("\t\t\tswitch (singleIndex)");
+            sb.AppendLine("\t\t\t{");
+
+            WriteSerializationBody(false);
+
+            sb.AppendLine("\t\t\t}");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+        }
+
+        private void WriteSerializationBody(bool isSerializeAll)
+        {
+            int iOverall = 0;
+            int singleCount = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName.Length;
+            for (int iSingle = 0; iSingle < singleCount; ++iSingle)
+            {
+                GONetParticipant_ComponentsWithAutoSyncMembers_Single single = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName[iSingle];
+                int singleMemberCount = single.autoSyncMembers.Length;
+                int iSingleMemberStart = 0;
+
+                if (isSerializeAll && single.componentTypeFullName == typeof(GONetParticipant).FullName)
+                {
+                    iSingleMemberStart = 1; // Skip GONetId
+                    ++iOverall;
+                }
+
+                for (int iSingleMember = iSingleMemberStart; iSingleMember < singleMemberCount; ++iSingleMember)
+                {
+                    GONetParticipant_ComponentsWithAutoSyncMembers_SingleMember singleMember = single.autoSyncMembers[iSingleMember];
+
+                    if (!isSerializeAll)
+                    {
+                        sb.Append("\t\t\t\tcase ").Append(iOverall).AppendLine(":");
+                    }
+
+                    sb.Append(isSerializeAll ? "\t\t\t" : "\t\t\t\t").Append("{ // ").Append(single.componentTypeName).Append(".").AppendLine(singleMember.memberName);
+                    WriteSingleSerialization(iOverall, single, singleMember, isSerializeAll ? "\t\t\t" : "\t\t\t\t", isSerializeAll);
+                    sb.Append(isSerializeAll ? "\t\t\t" : "\t\t\t\t").AppendLine("}");
+
+                    if (!isSerializeAll)
+                    {
+                        sb.AppendLine("\t\t\t\tbreak;");
+                        sb.AppendLine();
+                    }
+
+                    ++iOverall;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Checks if a type supports velocity-augmented sync (float, Vector2/3/4, Quaternion).
+        /// </summary>
+        private bool IsVelocityCapableType(string memberTypeFullName)
+        {
+            return memberTypeFullName == typeof(float).FullName ||
+                   memberTypeFullName == typeof(UnityEngine.Vector2).FullName ||
+                   memberTypeFullName == typeof(UnityEngine.Vector3).FullName ||
+                   memberTypeFullName == typeof(UnityEngine.Vector4).FullName ||
+                   memberTypeFullName == typeof(UnityEngine.Quaternion).FullName;
+        }
+
+        /// <summary>
+        /// Generates velocity calculation code for a given type.
+        /// Returns the velocity calculation as a GONetSyncableValue.
+        /// </summary>
+        private void WriteVelocityCalculation(int iOverall, string memberTypeFullName, GONetParticipant_ComponentsWithAutoSyncMembers_SingleMember singleMember, string indent)
+        {
+            sb.Append(indent).AppendLine("// VELOCITY BUNDLE: Send raw delta (no division - optimization!)");
+            sb.Append(indent).AppendLine($"var changesSupport = valuesChangesSupport[{iOverall}];");
+            sb.Append(indent).AppendLine("GONetSyncableValue velocityValue;");
+            sb.Append(indent).AppendLine();
+            sb.Append(indent).AppendLine("// CRITICAL: Use lastKnownValue (authority's transform) NOT mostRecentChanges (client blending queue)");
+            sb.Append(indent).AppendLine("var current = changesSupport.lastKnownValue;");
+            sb.Append(indent).AppendLine("var previous = changesSupport.lastKnownValue_previous;");
+            sb.Append(indent).AppendLine();
+            sb.Append(indent).AppendLine("// Check if we have valid previous value");
+            sb.Append(indent).AppendLine("if (current.GONetSyncType == previous.GONetSyncType && current.GONetSyncType != GONet.GONetSyncableValueTypes.System_Boolean)");
+            sb.Append(indent).AppendLine("{");
+
+            // Type-specific velocity calculation (convert raw delta to units/sec)
+            if (memberTypeFullName == typeof(float).FullName)
+            {
+                sb.Append(indent).AppendLine("\t// Calculate velocity from value change (units/sec)");
+                sb.Append(indent).AppendLine("\tfloat currentValue = current.System_Single;");
+                sb.Append(indent).AppendLine("\tfloat previousValue = previous.System_Single;");
+                sb.Append(indent).AppendLine();
+                sb.Append(indent).AppendLine("\t// Calculate deltaTime from timestamps");
+                sb.Append(indent).AppendLine("\tlong deltaTimeTicks = changesSupport.lastKnownValue_elapsedTicks - changesSupport.lastKnownValue_previous_elapsedTicks;");
+                sb.Append(indent).AppendLine("\tfloat deltaTime = (float)(deltaTimeTicks * GONet.Utils.HighResolutionTimeUtils.TICKS_TO_SECONDS);");
+                sb.Append(indent).AppendLine("\tif (deltaTime <= 0f) deltaTime = 0.0167f; // 60 FPS fallback");
+                sb.Append(indent).AppendLine();
+                sb.Append(indent).AppendLine("\tvelocityValue = new GONetSyncableValue();");
+                sb.Append(indent).AppendLine("\tfloat deltaValue = currentValue - previousValue;");
+                sb.Append(indent).AppendLine("\tvelocityValue.System_Single = deltaValue / deltaTime;  // Convert to units/sec");
+            }
+            else if (memberTypeFullName == typeof(UnityEngine.Vector2).FullName)
+            {
+                sb.Append(indent).AppendLine("\t// Calculate velocity from position change (units/sec)");
+                sb.Append(indent).AppendLine("\tUnityEngine.Vector2 currentValue = current.UnityEngine_Vector2;");
+                sb.Append(indent).AppendLine("\tUnityEngine.Vector2 previousValue = previous.UnityEngine_Vector2;");
+                sb.Append(indent).AppendLine();
+                sb.Append(indent).AppendLine("\t// Calculate deltaTime from timestamps");
+                sb.Append(indent).AppendLine("\tlong deltaTimeTicks = changesSupport.lastKnownValue_elapsedTicks - changesSupport.lastKnownValue_previous_elapsedTicks;");
+                sb.Append(indent).AppendLine("\tfloat deltaTime = (float)(deltaTimeTicks * GONet.Utils.HighResolutionTimeUtils.TICKS_TO_SECONDS);");
+                sb.Append(indent).AppendLine("\tif (deltaTime <= 0f) deltaTime = 0.0167f; // 60 FPS fallback");
+                sb.Append(indent).AppendLine();
+                sb.Append(indent).AppendLine("\tvelocityValue = new GONetSyncableValue();");
+                sb.Append(indent).AppendLine("\tUnityEngine.Vector2 deltaValue = currentValue - previousValue;");
+                sb.Append(indent).AppendLine("\tvelocityValue.UnityEngine_Vector2 = deltaValue / deltaTime;  // Convert to units/sec");
+            }
+            else if (memberTypeFullName == typeof(UnityEngine.Vector3).FullName)
+            {
+                sb.Append(indent).AppendLine("\t// Calculate velocity from position change (units/sec)");
+                sb.Append(indent).AppendLine("\tUnityEngine.Vector3 currentValue = current.UnityEngine_Vector3;");
+                sb.Append(indent).AppendLine("\tUnityEngine.Vector3 previousValue = previous.UnityEngine_Vector3;");
+                sb.Append(indent).AppendLine();
+                sb.Append(indent).AppendLine("\t// Calculate deltaTime from timestamps");
+                sb.Append(indent).AppendLine("\tlong deltaTimeTicks = changesSupport.lastKnownValue_elapsedTicks - changesSupport.lastKnownValue_previous_elapsedTicks;");
+                sb.Append(indent).AppendLine("\tfloat deltaTime = (float)(deltaTimeTicks * GONet.Utils.HighResolutionTimeUtils.TICKS_TO_SECONDS);");
+                sb.Append(indent).AppendLine();
+                sb.Append(indent).AppendLine("\t// Protect against zero deltaTime");
+                sb.Append(indent).AppendLine("\tif (deltaTime <= 0f)");
+                sb.Append(indent).AppendLine("\t{");
+                sb.Append(indent).AppendLine("\t\tdeltaTime = UnityEngine.Time.deltaTime > 0f ? UnityEngine.Time.deltaTime : 0.0167f; // 60 FPS fallback");
+                sb.Append(indent).AppendLine("\t}");
+                sb.Append(indent).AppendLine();
+                sb.Append(indent).AppendLine("\tvelocityValue = new GONetSyncableValue();");
+                sb.Append(indent).AppendLine("\tUnityEngine.Vector3 deltaValue = currentValue - previousValue;");
+                sb.Append(indent).AppendLine("\tUnityEngine.Vector3 velocity = deltaValue / deltaTime;");
+                sb.Append(indent).AppendLine("\tvelocityValue.UnityEngine_Vector3 = velocity;");
+                sb.Append(indent).AppendLine();
+                sb.Append(indent).AppendLine($"\t// VelocitySyncTelemetry.TrackVelocityCalculation(true, gonetParticipant.GONetId);");
+            }
+            else if (memberTypeFullName == typeof(UnityEngine.Vector4).FullName)
+            {
+                sb.Append(indent).AppendLine("\t// Calculate velocity from value change (units/sec)");
+                sb.Append(indent).AppendLine("\tUnityEngine.Vector4 currentValue = current.UnityEngine_Vector4;");
+                sb.Append(indent).AppendLine("\tUnityEngine.Vector4 previousValue = previous.UnityEngine_Vector4;");
+                sb.Append(indent).AppendLine();
+                sb.Append(indent).AppendLine("\t// Calculate deltaTime from timestamps");
+                sb.Append(indent).AppendLine("\tlong deltaTimeTicks = changesSupport.lastKnownValue_elapsedTicks - changesSupport.lastKnownValue_previous_elapsedTicks;");
+                sb.Append(indent).AppendLine("\tfloat deltaTime = (float)(deltaTimeTicks * GONet.Utils.HighResolutionTimeUtils.TICKS_TO_SECONDS);");
+                sb.Append(indent).AppendLine("\tif (deltaTime <= 0f) deltaTime = 0.0167f; // 60 FPS fallback");
+                sb.Append(indent).AppendLine();
+                sb.Append(indent).AppendLine("\tvelocityValue = new GONetSyncableValue();");
+                sb.Append(indent).AppendLine("\tUnityEngine.Vector4 deltaValue = currentValue - previousValue;");
+                sb.Append(indent).AppendLine("\tvelocityValue.UnityEngine_Vector4 = deltaValue / deltaTime;  // Convert to units/sec");
+            }
+            else if (memberTypeFullName == typeof(UnityEngine.Quaternion).FullName)
+            {
+                sb.Append(indent).AppendLine("\t// Angular velocity for Quaternion (stored as Vector3)");
+                sb.Append(indent).AppendLine("\tUnityEngine.Quaternion currentValue = current.UnityEngine_Quaternion;");
+                sb.Append(indent).AppendLine("\tUnityEngine.Quaternion previousValue = previous.UnityEngine_Quaternion;");
+                sb.Append(indent).AppendLine();
+                sb.Append(indent).AppendLine("\t// Calculate deltaTime from timestamps");
+                sb.Append(indent).AppendLine("\tlong deltaTimeTicks = changesSupport.lastKnownValue_elapsedTicks - changesSupport.lastKnownValue_previous_elapsedTicks;");
+                sb.Append(indent).AppendLine("\tfloat deltaTime = (float)(deltaTimeTicks * GONet.Utils.HighResolutionTimeUtils.TICKS_TO_SECONDS);");
+                sb.Append(indent).AppendLine();
+                sb.Append(indent).AppendLine("\t// Protect against zero deltaTime");
+                sb.Append(indent).AppendLine("\tif (deltaTime <= 0f)");
+                sb.Append(indent).AppendLine("\t{");
+                sb.Append(indent).AppendLine("\t\tdeltaTime = UnityEngine.Time.deltaTime > 0f ? UnityEngine.Time.deltaTime : 0.0167f; // 60 FPS fallback");
+                sb.Append(indent).AppendLine("\t}");
+                sb.Append(indent).AppendLine();
+                sb.Append(indent).AppendLine("\t// Use quaternion exponential map for angular velocity calculation");
+                sb.Append(indent).AppendLine("\tUnityEngine.Quaternion deltaRotation = currentValue * UnityEngine.Quaternion.Inverse(previousValue);");
+                sb.Append(indent).AppendLine("\t// Use Log_Exact() for precise angular velocity (eliminates polynomial approximation errors)");
+                sb.Append(indent).AppendLine("\tUnityEngine.Quaternion logDelta = GONet.Utils.QuaternionUtilsOptimized.Log_Exact(deltaRotation);");
+                sb.Append(indent).AppendLine("\t// logDelta contains half-angle rotation vector, multiply by 2 for full angular velocity");
+                sb.Append(indent).AppendLine("\tUnityEngine.Vector3 angularVelocity = new UnityEngine.Vector3(logDelta.x * 2f, logDelta.y * 2f, logDelta.z * 2f) / deltaTime;");
+                sb.Append(indent).AppendLine("\tvelocityValue = new GONetSyncableValue();");
+                sb.Append(indent).AppendLine("\tvelocityValue.UnityEngine_Vector3 = angularVelocity;");
+            }
+
+            sb.Append(indent).AppendLine("\t// VelocitySyncTelemetry.TrackVelocityCalculation(true, gonetParticipant.GONetId);");
+            sb.Append(indent).AppendLine("}");
+            sb.Append(indent).AppendLine("else");
+            sb.Append(indent).AppendLine("{");
+            sb.Append(indent).AppendLine("\t// Type mismatch, use zero delta");
+            sb.Append(indent).AppendLine("\tGONet.GONetLog.Warning($\"[VELOCITY-CALC-FALLBACK] GONetId={gonetParticipant.GONetId} currentType={current.GONetSyncType} previousType={previous.GONetSyncType} - Using zero velocity\");");
+            sb.Append(indent).AppendLine("\tvelocityValue = new GONetSyncableValue();");
+
+            // CRITICAL FIX: Initialize velocity type properly to avoid System_Boolean default
+            if (memberTypeFullName == typeof(float).FullName)
+            {
+                sb.Append(indent).AppendLine("\tvelocityValue.System_Single = 0f;");
+            }
+            else if (memberTypeFullName == typeof(UnityEngine.Vector2).FullName)
+            {
+                sb.Append(indent).AppendLine("\tvelocityValue.UnityEngine_Vector2 = UnityEngine.Vector2.zero;");
+            }
+            else if (memberTypeFullName == typeof(UnityEngine.Vector3).FullName)
+            {
+                sb.Append(indent).AppendLine("\tvelocityValue.UnityEngine_Vector3 = UnityEngine.Vector3.zero;");
+            }
+            else if (memberTypeFullName == typeof(UnityEngine.Vector4).FullName)
+            {
+                sb.Append(indent).AppendLine("\tvelocityValue.UnityEngine_Vector4 = UnityEngine.Vector4.zero;");
+            }
+            else if (memberTypeFullName == typeof(UnityEngine.Quaternion).FullName)
+            {
+                // Quaternion velocity is stored as Vector3 angular velocity
+                sb.Append(indent).AppendLine("\tvelocityValue.UnityEngine_Vector3 = UnityEngine.Vector3.zero;");
+            }
+
+            sb.Append(indent).AppendLine("\t// VelocitySyncTelemetry.TrackVelocityCalculation(false, gonetParticipant.GONetId);");
+            sb.Append(indent).AppendLine("}");
+            sb.Append(indent).AppendLine();
+        }
+
+        private void WriteSingleSerialization(int iOverall, GONetParticipant_ComponentsWithAutoSyncMembers_Single single, GONetParticipant_ComponentsWithAutoSyncMembers_SingleMember singleMember, string indent, bool isSerializeAll)
+        {
+            string memberTypeFullName = singleMember.memberTypeFullName;
+            string valueExpression = singleMember.animatorControllerParameterId == 0
+                ? $"{single.componentTypeName}.{singleMember.memberName}"
+                : $"{single.componentTypeName}.Get{singleMember.animatorControllerParameterMethodSuffix}({singleMember.animatorControllerParameterId})";
+
+            // Check if velocity-augmented sync applies to this member
+            bool usesVelocitySync = IsVelocityCapableType(memberTypeFullName) && singleMember.attribute.ShouldBlendBetweenValuesReceived;
+
+            // Check CustomSerialize, but EXCLUDE Vector types (they're handled separately below)
+            if (singleMember.attribute.CustomSerialize_Instance != null &&
+                memberTypeFullName != typeof(UnityEngine.Vector2).FullName &&
+                memberTypeFullName != typeof(UnityEngine.Vector3).FullName &&
+                memberTypeFullName != typeof(UnityEngine.Vector4).FullName &&
+                memberTypeFullName != typeof(UnityEngine.Quaternion).FullName)
+            {
+                sb.Append(indent).AppendLine("\t    IGONetAutoMagicalSync_CustomSerializer customSerializer = cachedCustomSerializers[" + iOverall + "];");
+                if (singleMember.attribute.QuantizeDownToBitCount > 0)
+                {
+                    // SUB-QUANTIZATION DIAGNOSTIC: Log delta-from-baseline that's actually being serialized
+                    string deltaFieldName = memberTypeFullName.Replace(".", "_");
+                    sb.Append(indent).AppendLine($"\t{{ // SUB-QUANTIZATION DIAGNOSTIC for {singleMember.memberName}");
+                    sb.Append(indent).AppendLine($"\t\tvar currentValue = {valueExpression};");
+                    sb.Append(indent).AppendLine($"\t\tvar baselineValue = valuesChangesSupport[{iOverall}].baselineValue_current.{deltaFieldName};");
+                    sb.Append(indent).AppendLine($"\t\tvar deltaFromBaseline = currentValue - baselineValue;");
+                    sb.Append(indent).AppendLine($"\t\t// GONet.Utils.SubQuantizationDiagnostics.CheckAndLogIfSubQuantization(gonetParticipant.GONetId, \"{singleMember.memberName}\", deltaFromBaseline, valuesChangesSupport[{iOverall}].syncAttribute_QuantizerSettingsGroup, customSerializer);");
+                    sb.Append(indent).Append("\t\tcustomSerializer.Serialize(bitStream_appendTo, gonetParticipant, deltaFromBaseline").AppendLine(");");
+                    sb.Append(indent).AppendLine("\t}");
+                }
+                else
+                {
+                    sb.Append(indent).Append("\tcustomSerializer.Serialize(bitStream_appendTo, gonetParticipant, ").Append(valueExpression).AppendLine(");");
+                }
+            }
+            else if (memberTypeFullName == typeof(bool).FullName || singleMember.animatorControllerParameterTypeFullName == typeof(bool).FullName)
+            {
+                sb.Append(indent).Append("\tbitStream_appendTo.WriteBit(").Append(valueExpression).AppendLine(");");
+            }
+            else if (memberTypeFullName == typeof(float).FullName || singleMember.animatorControllerParameterTypeFullName == typeof(float).FullName)
+            {
+                if (usesVelocitySync && !isSerializeAll)
+                {
+                    // VELOCITY-CAPABLE: Branch on bundle type
+                    sb.Append(indent).AppendLine("\tif (isVelocityBundle)");
+                    sb.Append(indent).AppendLine("\t{");
+
+                    WriteVelocityCalculation(iOverall, memberTypeFullName, singleMember, indent + "\t\t");
+
+                    sb.Append(indent).AppendLine($"\t\t// Serialize velocity using velocity serializer");
+                    sb.Append(indent).AppendLine($"\t\tcachedVelocitySerializers[{iOverall}].Serialize(bitStream_appendTo, gonetParticipant, velocityValue);");
+                    sb.Append(indent).AppendLine($"\t\t// VelocitySyncTelemetry.TrackVelocityBundleSent(gonetParticipant.GONetId);");
+                    sb.Append(indent).AppendLine("\t}");
+                    sb.Append(indent).AppendLine("\telse");
+                    sb.Append(indent).AppendLine("\t{");
+                    sb.Append(indent).AppendLine("\t\t// VALUE BUNDLE: Serialize position normally");
+
+                    if (singleMember.attribute.QuantizeDownToBitCount > 0)
+                    {
+                        sb.Append(indent).Append("\t\tSerializeSingleQuantized(bitStream_appendTo, ").Append(iOverall).Append(", ").Append(valueExpression).AppendLine(");");
+                    }
+                    else
+                    {
+                        sb.Append(indent).Append("\t\tbitStream_appendTo.WriteFloat(").Append(valueExpression).AppendLine(");");
+                    }
+                    sb.Append(indent).AppendLine($"\t\t// VelocitySyncTelemetry.TrackValueBundleSent(gonetParticipant.GONetId);");
+
+                    sb.Append(indent).AppendLine("\t}");
+                }
+                else
+                {
+                    // NO VELOCITY: Serialize normally
+                    if (singleMember.attribute.QuantizeDownToBitCount > 0)
+                    {
+                        sb.Append(indent).Append("\tSerializeSingleQuantized(bitStream_appendTo, ").Append(iOverall).Append(", ").Append(valueExpression).AppendLine(");");
+                    }
+                    else
+                    {
+                        sb.Append(indent).Append("\tbitStream_appendTo.WriteFloat(").Append(valueExpression).AppendLine(");");
+                    }
+                }
+            }
+            else if (memberTypeFullName == typeof(long).FullName)
+            {
+                sb.Append(indent).Append("\tbitStream_appendTo.WriteLong(").Append(valueExpression).AppendLine(");");
+            }
+            else if (memberTypeFullName == typeof(uint).FullName)
+            {
+                sb.Append(indent).Append("\tbitStream_appendTo.WriteUInt(").Append(valueExpression).AppendLine(");");
+            }
+            else if (memberTypeFullName == typeof(string).FullName)
+            {
+                sb.Append(indent).Append("                bitStream_appendTo.WriteString(").Append(valueExpression).AppendLine(");");
+            }
+            else if (memberTypeFullName == typeof(byte).FullName)
+            {
+                sb.Append(indent).Append("\tbitStream_appendTo.WriteByte(").Append(valueExpression).AppendLine(");");
+            }
+            else if (memberTypeFullName == typeof(ushort).FullName)
+            {
+                sb.Append(indent).Append("\tbitStream_appendTo.WriteUShort(").Append(valueExpression).AppendLine(");");
+            }
+            else if (memberTypeFullName == typeof(short).FullName || memberTypeFullName == typeof(int).FullName || singleMember.animatorControllerParameterTypeFullName == typeof(int).FullName || memberTypeFullName == typeof(sbyte).FullName || memberTypeFullName == typeof(double).FullName)
+            {
+                sb.Append(indent).Append("\tbyte[] bytes = BitConverter.GetBytes(").Append(valueExpression).AppendLine(");");
+                sb.Append(indent).AppendLine("\tint count = bytes.Length;");
+                sb.Append(indent).AppendLine("\tfor (int i = 0; i < count; ++i)");
+                sb.Append(indent).AppendLine("\t{");
+                sb.Append(indent).AppendLine("\t\tbitStream_appendTo.WriteByte(bytes[i]);");
+                sb.Append(indent).AppendLine("\t}");
+            }
+            if (memberTypeFullName == typeof(UnityEngine.Vector2).FullName || memberTypeFullName == typeof(UnityEngine.Vector3).FullName || memberTypeFullName == typeof(UnityEngine.Vector4).FullName || memberTypeFullName == typeof(UnityEngine.Quaternion).FullName)
+            {
+                sb.Append(indent).AppendLine("\t    IGONetAutoMagicalSync_CustomSerializer customSerializer = cachedCustomSerializers[" + iOverall + "];");
+
+                if (usesVelocitySync && !isSerializeAll)
+                {
+                    // TRACE: Capture server authority value before serialization
+                    if (memberTypeFullName == typeof(UnityEngine.Quaternion).FullName)
+                    {
+                        sb.Append(indent).AppendLine($"\t// VelocitySyncTelemetry.TraceServerAuthority(gonetParticipant.GONetId, {iOverall}, \"{singleMember.memberName}\", {valueExpression});");
+                    }
+
+                    // VELOCITY-CAPABLE: Branch on bundle type
+                    sb.Append(indent).AppendLine("\tif (isVelocityBundle)");
+                    sb.Append(indent).AppendLine("\t{");
+
+                    WriteVelocityCalculation(iOverall, memberTypeFullName, singleMember, indent + "\t\t");
+
+                    sb.Append(indent).AppendLine($"\t\t// Serialize velocity using velocity serializer");
+                    sb.Append(indent).AppendLine($"\t\tcachedVelocitySerializers[{iOverall}].Serialize(bitStream_appendTo, gonetParticipant, velocityValue);");
+                    sb.Append(indent).AppendLine($"\t\t// VelocitySyncTelemetry.TrackVelocityBundleSent(gonetParticipant.GONetId);");
+
+                    // TRACE: Log VELOCITY bundle send (Quaternion only)
+                    if (memberTypeFullName == typeof(UnityEngine.Quaternion).FullName)
+                    {
+                        sb.Append(indent).AppendLine($"\t\t// VelocitySyncTelemetry.TraceServerSend(gonetParticipant.GONetId, {iOverall}, \"VELOCITY\", {valueExpression}, velocityValue.UnityEngine_Vector3, \"partition_decision\", valuesChangesSupport[{iOverall}].mostRecentChanges_usedSize, true);");
+                    }
+
+                    sb.Append(indent).AppendLine("\t}");
+                    sb.Append(indent).AppendLine("\telse");
+                    sb.Append(indent).AppendLine("\t{");
+                    sb.Append(indent).AppendLine("\t\t// VALUE BUNDLE: Serialize position normally");
+
+                    if (singleMember.attribute.QuantizeDownToBitCount > 0)
+                    {
+                        // SUB-QUANTIZATION DIAGNOSTIC: Log delta-from-baseline that's actually being serialized
+                        string deltaFieldName = memberTypeFullName.Replace(".", "_");
+                        sb.Append(indent).AppendLine($"\t\t{{ // SUB-QUANTIZATION DIAGNOSTIC for {singleMember.memberName}");
+                        sb.Append(indent).AppendLine($"\t\t\tvar currentValue = {valueExpression};");
+                        sb.Append(indent).AppendLine($"\t\t\tvar baselineValue = valuesChangesSupport[{iOverall}].baselineValue_current.{deltaFieldName};");
+                        sb.Append(indent).AppendLine($"\t\t\tvar deltaFromBaseline = currentValue - baselineValue;");
+                        sb.Append(indent).AppendLine($"\t\t\t// GONet.Utils.SubQuantizationDiagnostics.CheckAndLogIfSubQuantization(gonetParticipant.GONetId, \"{singleMember.memberName}\", deltaFromBaseline, valuesChangesSupport[{iOverall}].syncAttribute_QuantizerSettingsGroup, customSerializer);");
+                        sb.Append(indent).Append("\t\t\tcustomSerializer.Serialize(bitStream_appendTo, gonetParticipant, deltaFromBaseline").AppendLine(");");
+                        sb.Append(indent).AppendLine("\t\t}");
+                    }
+                    else
+                    {
+                        // NOTE: No sub-quantization diagnostic here because this path is for values WITHOUT baseline subtraction
+                        // (like Quaternion rotation which uses Smallest3 encoding with quantization handled inside the serializer)
+                        sb.Append(indent).Append("\t\tcustomSerializer.Serialize(bitStream_appendTo, gonetParticipant, ").Append(valueExpression).AppendLine(");");
+                    }
+
+                    // CRITICAL: Store this VALUE as a snapshot for future velocity calculations
+                    sb.Append(indent).AppendLine();
+                    sb.Append(indent).AppendLine($"\t\t// Store snapshot for velocity calculation on next VELOCITY bundle");
+                    sb.Append(indent).AppendLine($"\t\tvar snapshotValue = new GONetSyncableValue();");
+                    string snapshotFieldName = memberTypeFullName.Replace(".", "_");
+                    sb.Append(indent).AppendLine($"\t\tsnapshotValue.{snapshotFieldName} = {valueExpression};");
+                    sb.Append(indent).AppendLine($"\t\tvaluesChangesSupport[{iOverall}].AddToMostRecentChangeQueue_IfAppropriate(GONet.GONetMain.Time.ElapsedTicks, snapshotValue);");
+                    sb.Append(indent).AppendLine($"\t\t// VelocitySyncTelemetry.TrackValueBundleSent(gonetParticipant.GONetId);");
+
+                    // TRACE: Log VALUE bundle send (Quaternion only)
+                    if (memberTypeFullName == typeof(UnityEngine.Quaternion).FullName)
+                    {
+                        sb.Append(indent).AppendLine($"\t\t// VelocitySyncTelemetry.TraceServerSend(gonetParticipant.GONetId, {iOverall}, \"VALUE\", {valueExpression}, UnityEngine.Vector3.zero, \"partition_decision\", valuesChangesSupport[{iOverall}].mostRecentChanges_usedSize, false);");
+                    }
+
+                    sb.Append(indent).AppendLine("\t}");
+                }
+                else
+                {
+                    // NO VELOCITY: Serialize normally
+                    if (singleMember.attribute.QuantizeDownToBitCount > 0)
+                    {
+                        // SUB-QUANTIZATION DIAGNOSTIC: Log delta-from-baseline that's actually being serialized
+                        string deltaFieldName = memberTypeFullName.Replace(".", "_");
+                        sb.Append(indent).AppendLine($"\t{{ // SUB-QUANTIZATION DIAGNOSTIC for {singleMember.memberName}");
+                        sb.Append(indent).AppendLine($"\t\tvar currentValue = {valueExpression};");
+                        sb.Append(indent).AppendLine($"\t\tvar baselineValue = valuesChangesSupport[{iOverall}].baselineValue_current.{deltaFieldName};");
+                        sb.Append(indent).AppendLine($"\t\tvar deltaFromBaseline = currentValue - baselineValue;");
+                        sb.Append(indent).AppendLine($"\t\t// GONet.Utils.SubQuantizationDiagnostics.CheckAndLogIfSubQuantization(gonetParticipant.GONetId, \"{singleMember.memberName}\", deltaFromBaseline, valuesChangesSupport[{iOverall}].syncAttribute_QuantizerSettingsGroup, customSerializer);");
+                        sb.Append(indent).Append("\t\tcustomSerializer.Serialize(bitStream_appendTo, gonetParticipant, deltaFromBaseline").AppendLine(");");
+                        sb.Append(indent).AppendLine("\t}");
+                    }
+                    else
+                    {
+                        // NOTE: No sub-quantization diagnostic here because this path is for values WITHOUT baseline subtraction
+                        // (like Quaternion rotation which uses Smallest3 encoding with quantization handled inside the serializer)
+                        sb.Append(indent).Append("\tcustomSerializer.Serialize(bitStream_appendTo, gonetParticipant, ").Append(valueExpression).AppendLine(");");
+                    }
+                }
+            }
+        }
+
+        private void WriteAreEqualQuantized()
+        {
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine("        /// PRE: value at <paramref name=\"singleIndex\"/> is known to be configured to be quantized");
+            sb.AppendLine("        /// NOTE: This is only virtual to avoid upgrading customers prior to this being added having compilation issues when upgrading from a previous version of GONet");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        protected override bool AreEqualQuantized(byte singleIndex, GONetSyncableValue valueA, GONetSyncableValue valueB)");
+            sb.AppendLine("\t\t{");
+            sb.AppendLine("\t\t\tswitch (singleIndex)");
+            sb.AppendLine("\t\t\t{");
+
+            int iOverall = 0;
+            int singleCount = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName.Length;
+            for (int iSingle = 0; iSingle < singleCount; ++iSingle)
+            {
+                GONetParticipant_ComponentsWithAutoSyncMembers_Single single = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName[iSingle];
+                int singleMemberCount = single.autoSyncMembers.Length;
+                for (int iSingleMember = 0; iSingleMember < singleMemberCount; ++iSingleMember)
+                {
+                    GONetParticipant_ComponentsWithAutoSyncMembers_SingleMember singleMember = single.autoSyncMembers[iSingleMember];
+
+                    sb.Append("\t\t\t\tcase ").Append(iOverall).AppendLine(":");
+                    sb.Append("\t\t\t\t{ // ").Append(single.componentTypeName).Append(".").AppendLine(singleMember.memberName);
+
+                    WriteAreEqualQuantizedBody(iOverall, singleMember);
+
+                    sb.AppendLine("\t\t\t\t}");
+                    sb.AppendLine("\t\t\t\tbreak;");
+                    sb.AppendLine();
+
+                    ++iOverall;
+                }
+            }
+
+            sb.AppendLine("\t\t\t}");
+            sb.AppendLine();
+            sb.AppendLine("\t\t\treturn base.AreEqualQuantized(singleIndex, valueA, valueB);");
+            sb.AppendLine("\t\t}");
+            sb.AppendLine();
+        }
+
+        private void WriteAreEqualQuantizedBody(int iOverall, GONetParticipant_ComponentsWithAutoSyncMembers_SingleMember singleMember)
+        {
+            string memberTypeFullName = singleMember.memberTypeFullName;
+
+            if (singleMember.attribute.CustomSerialize_Instance != null)
+            {
+                sb.AppendLine("\t\t\t\t    IGONetAutoMagicalSync_CustomSerializer customSerializer = cachedCustomSerializers[" + iOverall + "];");
+                sb.AppendLine("\t\t\t\t\treturn customSerializer.AreEqualConsideringQuantization(valueA, valueB);");
+            }
+            else if (memberTypeFullName == typeof(bool).FullName)
+            {
+                sb.Append("\t\t\t\t\treturn valueA.").Append(memberTypeFullName.Replace(".", "_")).Append(" == valueB.").Append(memberTypeFullName.Replace(".", "_")).AppendLine(";");
+            }
+            else if (singleMember.animatorControllerParameterTypeFullName == typeof(bool).FullName)
+            {
+                sb.Append("\t\t\t\t\treturn valueA.").Append(singleMember.animatorControllerParameterTypeFullName.Replace(".", "_")).Append(" == valueB.").Append(singleMember.animatorControllerParameterTypeFullName.Replace(".", "_")).AppendLine(";");
+            }
+            else if (memberTypeFullName == typeof(float).FullName || singleMember.animatorControllerParameterTypeFullName == typeof(float).FullName)
+            {
+                if (singleMember.attribute.QuantizeDownToBitCount > 0)
+                {
+                    sb.Append("\t\t\t\t\treturn QuantizeSingle(").Append(iOverall).Append(", valueA) == QuantizeSingle(").Append(iOverall).AppendLine(", valueB);");
+                }
+            }
+            else if (memberTypeFullName == typeof(UnityEngine.Vector2).FullName || memberTypeFullName == typeof(UnityEngine.Vector3).FullName || memberTypeFullName == typeof(UnityEngine.Vector4).FullName || memberTypeFullName == typeof(UnityEngine.Quaternion).FullName)
+            {
+                sb.AppendLine("\t\t\t\t    IGONetAutoMagicalSync_CustomSerializer customSerializer = cachedCustomSerializers[" + iOverall + "];");
+                sb.AppendLine("\t\t\t\t\treturn customSerializer.AreEqualConsideringQuantization(valueA, valueB);");
+            }
+            else
+            {
+                sb.AppendLine("\t\t\t\t\t// handle quantization of this type eventually?");
+            }
+        }
+
+        private void WriteDeserializeInitAll()
+        {
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine("        /// Deserializes all values from <paramref name=\"bitStream_readFrom\"/> and uses them to modify appropriate member variables internally.");
+            sb.AppendLine("        /// Oops.  Just kidding....it's ALMOST all values.  The exception being <see cref=\"GONetParticipant.GONetId\"/> because that has to be processed first separately in order");
+            sb.AppendLine("        /// to know which <see cref=\"GONetParticipant\"/> we are working with in order to call this method.");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        internal override void DeserializeInitAll(Utils.BitByBitByteArrayBuilder bitStream_readFrom, long assumedElapsedTicksAtChange)");
+            sb.AppendLine("        {");
+
+            WriteDeserializeAllBody();
+
+            sb.AppendLine("        }");
+            sb.AppendLine();
+        }
+
+        private void WriteDeserializeAllBody()
+        {
+            int iOverall = 0;
+            int singleCount = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName.Length;
+            for (int iSingle = 0; iSingle < singleCount; ++iSingle)
+            {
+                GONetParticipant_ComponentsWithAutoSyncMembers_Single single = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName[iSingle];
+                int singleMemberCount = single.autoSyncMembers.Length;
+                int iSingleMemberStart = 0;
+
+                if (single.componentTypeFullName == typeof(GONetParticipant).FullName)
+                {
+                    iSingleMemberStart = 1;
+                    ++iOverall;
+                }
+
+                for (int iSingleMember = iSingleMemberStart; iSingleMember < singleMemberCount; ++iSingleMember)
+                {
+                    GONetParticipant_ComponentsWithAutoSyncMembers_SingleMember singleMember = single.autoSyncMembers[iSingleMember];
+
+                    sb.Append("\t\t\t{ // ").Append(single.componentTypeName).Append(".").AppendLine(singleMember.memberName);
+
+                    // DeserializeInitAll: Always deserialize VALUES (no velocity during INIT sync)
+                    WriteDeserializeSingle(iOverall, single, singleMember, "\t\t\t", true);
+
+                    sb.AppendLine("\t\t\t}");
+
+                    ++iOverall;
+                }
+            }
+        }
+
+        private void WriteInitSingle()
+        {
+            sb.AppendLine("        internal override void InitSingle(GONetSyncableValue value, byte singleIndex, long assumedElapsedTicksAtChange)");
+            sb.AppendLine("        {");
+            sb.AppendLine("\t\t\tswitch (singleIndex)");
+            sb.AppendLine("\t\t\t{");
+
+            WriteInitSingleBody();
+
+            sb.AppendLine("\t\t\t}");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+        }
+
+        private void WriteInitSingleBody()
+        {
+            int iOverall = 0;
+            int singleCount = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName.Length;
+            for (int iSingle = 0; iSingle < singleCount; ++iSingle)
+            {
+                GONetParticipant_ComponentsWithAutoSyncMembers_Single single = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName[iSingle];
+                int singleMemberCount = single.autoSyncMembers.Length;
+                for (int iSingleMember = 0; iSingleMember < singleMemberCount; ++iSingleMember)
+                {
+                    GONetParticipant_ComponentsWithAutoSyncMembers_SingleMember singleMember = single.autoSyncMembers[iSingleMember];
+
+                    // Compact single-line format to match T4 template
+                    sb.Append("\t\t\t\tcase ").Append(iOverall).Append(":\t\t\t\t\t");
+
+                    // Apply value based on blend settings
+                    if (singleMember.attribute.ShouldBlendBetweenValuesReceived && (singleMember.animatorControllerParameterId == 0 || singleMember.animatorControllerParameterTypeFullName == typeof(float).FullName))
+                    {
+                        sb.Append("valuesChangesSupport[").Append(iOverall).Append("].AddToMostRecentChangeQueue_IfAppropriate(assumedElapsedTicksAtChange, value); break; // NOTE: this queue will be used each frame to blend between this value and others added there");
+                    }
+                    else
+                    {
+                        if (singleMember.animatorControllerParameterId == 0)
+                        {
+                            sb.Append(single.componentTypeName).Append(".").Append(singleMember.memberName).Append(" = value.").Append(singleMember.memberTypeFullName.Replace(".", "_")).Append("; break;");
+                        }
+                        else
+                        {
+                            sb.Append(single.componentTypeName).Append(".Set").Append(singleMember.animatorControllerParameterMethodSuffix).Append("(").Append(singleMember.animatorControllerParameterId).Append(", (").Append(singleMember.animatorControllerParameterTypeFullName).Append(")value.").Append(singleMember.animatorControllerParameterTypeFullName.Replace(".", "_")).Append("); break;");
+                        }
+                    }
+                    sb.AppendLine();
+
+                    ++iOverall;
+                }
+            }
+        }
+
+        private void WriteDeserializeInitSingle_ReadOnlyNotApply()
+        {
+            sb.AppendLine();
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine("        /// Simply deserializes in order to move along the bit stream counter, but does NOT apply the values (i.e, does NOT init).");
+            sb.AppendLine("        /// Velocity-augmented sync: Supports deserializing either VALUE or VELOCITY data based on useVelocitySerializer parameter.");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        /// <param name=\"bitStream_readFrom\">The bit stream to deserialize from</param>");
+            sb.AppendLine("        /// <param name=\"singleIndex\">The index of the value to deserialize</param>");
+            sb.AppendLine("        /// <param name=\"useVelocitySerializer\">If true, uses cachedVelocitySerializers; if false, uses cachedValueSerializers. Default false.</param>");
+            sb.AppendLine("        /// <returns>The deserialized value (either VALUE or VELOCITY depending on useVelocitySerializer)</returns>");
+            sb.AppendLine("        internal override GONet.GONetSyncableValue DeserializeInitSingle_ReadOnlyNotApply(Utils.BitByBitByteArrayBuilder bitStream_readFrom, byte singleIndex, bool useVelocitySerializer = false)");
+            sb.AppendLine("        {");
+            sb.AppendLine("\t\t\tswitch (singleIndex)");
+            sb.AppendLine("\t\t\t{");
+
+            WriteDeserializeSingleBody(true);
+
+            sb.AppendLine("\t\t\t}");
+            sb.AppendLine();
+            sb.AppendLine("\t\t\treturn default;");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+        }
+
+        private void WriteDeserializeInitSingle()
+        {
+            sb.AppendLine();
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine("        /// Deserializes and initializes a single value.");
+            sb.AppendLine("        /// Velocity-augmented sync: For VELOCITY bundles, synthesizes position from velocity before applying.");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        internal override void DeserializeInitSingle(Utils.BitByBitByteArrayBuilder bitStream_readFrom, byte singleIndex, long assumedElapsedTicksAtChange, bool useVelocitySerializer = false)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            GONetSyncableValue value = DeserializeInitSingle_ReadOnlyNotApply(bitStream_readFrom, singleIndex, useVelocitySerializer);");
+            sb.AppendLine();
+            sb.AppendLine("            // NOTE: Velocity synthesis removed - GONet.cs handles synthesis manually via static method");
+            sb.AppendLine("            // This code path (DeserializeInitSingle with synthesis) is never actually reached in practice.");
+            sb.AppendLine("            // GONet.cs calls DeserializeInitSingle_ReadOnlyNotApply and does synthesis itself.");
+            sb.AppendLine();
+            sb.AppendLine("            InitSingle(value, singleIndex, assumedElapsedTicksAtChange);");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+        }
+
+        // NOTE: WriteIsVelocityEligible() and WriteSynthesizeValueFromVelocity() methods removed.
+        // Velocity synthesis is handled by GONet.cs static SynthesizeValueFromVelocity() method instead.
+        // Generated code only needs DeserializeInitSingle_ReadOnlyNotApply() to read velocity data.
+
+        private void WriteDeserializeSingleBody(bool readOnly)
+        {
+            int iOverall = 0;
+            int singleCount = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName.Length;
+            for (int iSingle = 0; iSingle < singleCount; ++iSingle)
+            {
+                GONetParticipant_ComponentsWithAutoSyncMembers_Single single = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName[iSingle];
+                int singleMemberCount = single.autoSyncMembers.Length;
+                for (int iSingleMember = 0; iSingleMember < singleMemberCount; ++iSingleMember)
+                {
+                    GONetParticipant_ComponentsWithAutoSyncMembers_SingleMember singleMember = single.autoSyncMembers[iSingleMember];
+
+                    sb.Append("\t\t\t\tcase ").Append(iOverall).AppendLine(":");
+                    sb.Append("\t\t\t\t{ // ").Append(single.componentTypeName).Append(".").AppendLine(singleMember.memberName);
+
+                    // NOTE: Velocity bit reading/processing happens in GONet.cs event processing layer, not here
+                    // This method only deserializes the VALUE data (not velocity)
+                    WriteDeserializeSingle(iOverall, single, singleMember, "\t\t\t\t", false, readOnly);
+                    sb.AppendLine("\t\t\t\t\treturn value;");
+
+                    sb.AppendLine("\t\t\t\t}");
+
+                    ++iOverall;
+                }
+            }
+        }
+
+        private void WriteDeserializeSingle(int iOverall, GONetParticipant_ComponentsWithAutoSyncMembers_Single single, GONetParticipant_ComponentsWithAutoSyncMembers_SingleMember singleMember, string indent, bool isDeserializeAll, bool readOnly = false)
+        {
+            string memberTypeFullName = singleMember.memberTypeFullName;
+
+            if (singleMember.attribute.CustomSerialize_Instance != null)
+            {
+                // Velocity-augmented sync: Use appropriate serializer array based on useVelocitySerializer parameter
+                // For backward compatibility, cachedCustomSerializers is used when not in ReadOnlyNotApply mode
+                if (readOnly)
+                {
+                    sb.Append(indent).AppendLine("\t// Velocity-augmented sync: Choose serializer based on packet type (VALUE vs VELOCITY)");
+                    sb.Append(indent).AppendLine("\tIGONetAutoMagicalSync_CustomSerializer customSerializer = useVelocitySerializer ? cachedVelocitySerializers[" + iOverall + "] : cachedValueSerializers[" + iOverall + "];");
+                }
+                else
+                {
+                    sb.Append(indent).AppendLine("\tIGONetAutoMagicalSync_CustomSerializer customSerializer = cachedCustomSerializers[" + iOverall + "];");
+                }
+                if (isDeserializeAll)
+                {
+                    sb.Append(indent).Append("\tvar value = customSerializer.Deserialize(bitStream_readFrom).").Append(memberTypeFullName.Replace(".", "_")).AppendLine(";");
+                    // NOTE: DeserializeAll is ONLY used for INIT sync (always VALUE bundles, never VELOCITY bundles)
+                    // So baseline addition is always correct here (no useVelocitySerializer check needed)
+                    if (singleMember.attribute.QuantizeDownToBitCount > 0)
+                    {
+                        sb.Append(indent).Append("\tvalue += valuesChangesSupport[").Append(iOverall).Append("].baselineValue_current.").Append(memberTypeFullName.Replace(".", "_")).AppendLine(";");
+                    }
+                    // For DeserializeAll, apply the value directly
+                    if (singleMember.animatorControllerParameterId == 0)
+                    {
+                        sb.Append(indent).Append("\t").Append(single.componentTypeName).Append(".").Append(singleMember.memberName).AppendLine(" = value;");
+                    }
+                    else
+                    {
+                        sb.Append(indent).Append("\t").Append(single.componentTypeName).Append(".Set").Append(singleMember.animatorControllerParameterMethodSuffix).Append("(").Append(singleMember.animatorControllerParameterId).AppendLine(", value);");
+                    }
+                }
+                else if (readOnly) // ReadOnlyNotApply - extract specific type from GONetSyncableValue
+                {
+                    sb.Append(indent).AppendLine("\tGONetSyncableValue value = customSerializer.Deserialize(bitStream_readFrom);");
+
+                    // CRITICAL FIX: Quaternion VELOCITY bundles contain Vector3 angular velocity, NOT Quaternion!
+                    if (memberTypeFullName == typeof(UnityEngine.Quaternion).FullName)
+                    {
+                        sb.Append(indent).AppendLine("\tif (useVelocitySerializer)");
+                        sb.Append(indent).AppendLine("\t{");
+                        sb.Append(indent).AppendLine("\t\t// VELOCITY bundle: Contains Vector3 angular velocity (rad/s)");
+                        sb.Append(indent).AppendLine("\t\tvar typedValue = value.UnityEngine_Vector3;");
+                        sb.Append(indent).AppendLine("\t\tvalue.UnityEngine_Vector3 = typedValue;");
+                        sb.Append(indent).AppendLine("\t}");
+                        sb.Append(indent).AppendLine("\telse");
+                        sb.Append(indent).AppendLine("\t{");
+                        sb.Append(indent).AppendLine("\t\t// VALUE bundle: Contains Quaternion rotation");
+                        sb.Append(indent).AppendLine("\t\tvar typedValue = value.UnityEngine_Quaternion;");
+                        sb.Append(indent).AppendLine("\t\tvalue.UnityEngine_Quaternion = typedValue;");
+                        sb.Append(indent).AppendLine("\t}");
+                    }
+                    else
+                    {
+                        sb.Append(indent).Append("\tvar typedValue = value.").Append(memberTypeFullName.Replace(".", "_")).AppendLine(";");
+
+                        // VELOCITY-AUGMENTED SYNC FIX: Only add baseline for VALUE bundles, NOT VELOCITY bundles
+                        // When useVelocitySerializer=true, we're deserializing velocity (not delta-from-baseline)
+                        if (singleMember.attribute.QuantizeDownToBitCount > 0)
+                        {
+                            sb.Append(indent).AppendLine("\tif (!useVelocitySerializer)");
+                            sb.Append(indent).AppendLine("\t{");
+                            sb.Append(indent).Append("\t\ttypedValue += valuesChangesSupport[").Append(iOverall).Append("].baselineValue_current.").Append(memberTypeFullName.Replace(".", "_")).AppendLine(";");
+                            sb.Append(indent).AppendLine("\t}");
+                        }
+
+                        // Update the GONetSyncableValue with the adjusted typed value before returning
+                        sb.Append(indent).Append("\tvalue.").Append(memberTypeFullName.Replace(".", "_")).AppendLine(" = typedValue;");
+                    }
+                }
+            }
+            else if (memberTypeFullName == typeof(bool).FullName || singleMember.animatorControllerParameterTypeFullName == typeof(bool).FullName)
+            {
+                sb.Append(indent).AppendLine("\tbool value;");
+                sb.Append(indent).AppendLine("                bitStream_readFrom.ReadBit(out value);");
+                if (isDeserializeAll)
+                {
+                    if (singleMember.animatorControllerParameterId == 0)
+                    {
+                        sb.Append(indent).Append("\t").Append(single.componentTypeName).Append(".").Append(singleMember.memberName).AppendLine(" = value;");
+                    }
+                    else
+                    {
+                        sb.Append(indent).Append("\t").Append(single.componentTypeName).Append(".Set").Append(singleMember.animatorControllerParameterMethodSuffix).Append("(").Append(singleMember.animatorControllerParameterId).AppendLine(", value);");
+                    }
+                }
+            }
+            else if (memberTypeFullName == typeof(float).FullName || singleMember.animatorControllerParameterTypeFullName == typeof(float).FullName)
+            {
+                sb.Append(indent).AppendLine("\tfloat value;");
+                if (singleMember.attribute.QuantizeDownToBitCount > 0)
+                {
+                    sb.Append(indent).Append("\tvalue = DeserializeSingleQuantized(bitStream_readFrom, ").Append(iOverall).AppendLine(").System_Single;");
+                }
+                else
+                {
+                    sb.Append(indent).AppendLine("                bitStream_readFrom.ReadFloat(out value);");
+                }
+
+                if (isDeserializeAll)
+                {
+                    if (singleMember.animatorControllerParameterId == 0)
+                    {
+                        sb.Append(indent).Append("\t").Append(single.componentTypeName).Append(".").Append(singleMember.memberName).AppendLine(" = value;");
+                    }
+                    else
+                    {
+                        sb.Append(indent).Append("\t").Append(single.componentTypeName).Append(".Set").Append(singleMember.animatorControllerParameterMethodSuffix).Append("(").Append(singleMember.animatorControllerParameterId).AppendLine(", value);");
+                    }
+                }
+            }
+            else if (memberTypeFullName == typeof(long).FullName)
+            {
+                sb.Append(indent).AppendLine("\tlong value;");
+                sb.Append(indent).AppendLine("                bitStream_readFrom.ReadLong(out value);");
+                if (isDeserializeAll)
+                {
+                    sb.Append(indent).Append("\t").Append(single.componentTypeName).Append(".").Append(singleMember.memberName).AppendLine(" = value;");
+                }
+            }
+            else if (memberTypeFullName == typeof(uint).FullName)
+            {
+                sb.Append(indent).AppendLine("\tuint value;");
+                sb.Append(indent).AppendLine("                bitStream_readFrom.ReadUInt(out value);");
+                if (isDeserializeAll)
+                {
+                    sb.Append(indent).Append("\t").Append(single.componentTypeName).Append(".").Append(singleMember.memberName).AppendLine(" = value;");
+                }
+            }
+            else if (memberTypeFullName == typeof(string).FullName)
+            {
+                sb.Append(indent).AppendLine("\tstring value;");
+                sb.Append(indent).AppendLine("                bitStream_readFrom.ReadString(out value);");
+                if (isDeserializeAll)
+                {
+                    sb.Append(indent).Append("\t").Append(single.componentTypeName).Append(".").Append(singleMember.memberName).AppendLine(" = value;");
+                }
+            }
+            else if (memberTypeFullName == typeof(byte).FullName)
+            {
+                if (isDeserializeAll)
+                {
+                    sb.Append(indent).Append("\t").Append(single.componentTypeName).Append(".").Append(singleMember.memberName).AppendLine(" = (byte)bitStream_readFrom.ReadByte();");
+                }
+                else
+                {
+                    sb.Append(indent).AppendLine("\tvar value = (byte)bitStream_readFrom.ReadByte();");
+                }
+            }
+            else if (memberTypeFullName == typeof(ushort).FullName)
+            {
+                sb.Append(indent).AppendLine("\tushort value;");
+                sb.Append(indent).AppendLine("                bitStream_readFrom.ReadUShort(out value);");
+                if (isDeserializeAll)
+                {
+                    sb.Append(indent).Append("\t").Append(single.componentTypeName).Append(".").Append(singleMember.memberName).AppendLine(" = value;");
+                }
+            }
+            else if (memberTypeFullName == typeof(short).FullName)
+            {
+                sb.Append(indent).AppendLine("\tint count = 2;");
+                sb.Append(indent).AppendLine("\tbyte[] bytes = GetMyValueDeserializeByteArray();");
+                sb.Append(indent).AppendLine("\tfor (int i = 0; i < count; ++i)");
+                sb.Append(indent).AppendLine("\t{");
+                sb.Append(indent).AppendLine("\t\tbyte b = (byte)bitStream_readFrom.ReadByte();");
+                sb.Append(indent).AppendLine("\t\tbytes[i] = b;");
+                sb.Append(indent).AppendLine("\t}");
+                if (isDeserializeAll)
+                {
+                    sb.Append(indent).Append("\t").Append(single.componentTypeName).Append(".").Append(singleMember.memberName).AppendLine(" = BitConverter.ToInt16(bytes, 0);");
+                }
+                else // for ReadOnlyNotApply variant
+                {
+                    sb.Append(indent).AppendLine("\tvar value = BitConverter.ToInt16(bytes, 0);");
+                }
+            }
+            else if (memberTypeFullName == typeof(int).FullName || singleMember.animatorControllerParameterTypeFullName == typeof(int).FullName)
+            {
+                sb.Append(indent).AppendLine("\tint count = 4;");
+                sb.Append(indent).AppendLine("\tbyte[] bytes = GetMyValueDeserializeByteArray();");
+                sb.Append(indent).AppendLine("\tfor (int i = 0; i < count; ++i)");
+                sb.Append(indent).AppendLine("\t{");
+                sb.Append(indent).AppendLine("\t\tbyte b = (byte)bitStream_readFrom.ReadByte();");
+                sb.Append(indent).AppendLine("\t\tbytes[i] = b;");
+                sb.Append(indent).AppendLine("\t}");
+                if (isDeserializeAll)
+                {
+                    if (singleMember.animatorControllerParameterId == 0)
+                    {
+                        sb.Append(indent).Append("\t").Append(single.componentTypeName).Append(".").Append(singleMember.memberName).AppendLine(" = BitConverter.ToInt32(bytes, 0);");
+                    }
+                    else
+                    {
+                        sb.Append(indent).Append("\t").Append(single.componentTypeName).Append(".Set").Append(singleMember.animatorControllerParameterMethodSuffix).Append("(").Append(singleMember.animatorControllerParameterId).AppendLine(", BitConverter.ToInt32(bytes, 0));");
+                    }
+                }
+                else // for ReadOnlyNotApply variant
+                {
+                    sb.Append(indent).AppendLine("\tvar value = BitConverter.ToInt32(bytes, 0);");
+                }
+            }
+            else if (memberTypeFullName == typeof(sbyte).FullName)
+            {
+                if (isDeserializeAll)
+                {
+                    sb.Append(indent).Append("\t").Append(single.componentTypeName).Append(".").Append(singleMember.memberName).AppendLine(" = (sbyte)bitStream_readFrom.ReadByte();");
+                }
+                else
+                {
+                    sb.Append(indent).AppendLine("\tvar value = (sbyte)bitStream_readFrom.ReadByte();");
+                }
+            }
+            else if (memberTypeFullName == typeof(double).FullName)
+            {
+                sb.Append(indent).AppendLine("\tint count = 8;");
+                sb.Append(indent).AppendLine("\tbyte[] bytes = GetMyValueDeserializeByteArray();");
+                sb.Append(indent).AppendLine("\tfor (int i = 0; i < count; ++i)");
+                sb.Append(indent).AppendLine("\t{");
+                sb.Append(indent).AppendLine("\t\tbyte b = (byte)bitStream_readFrom.ReadByte();");
+                sb.Append(indent).AppendLine("\t\tbytes[i] = b;");
+                sb.Append(indent).AppendLine("\t}");
+                if (isDeserializeAll)
+                {
+                    sb.Append(indent).Append("\t").Append(single.componentTypeName).Append(".").Append(singleMember.memberName).AppendLine(" = BitConverter.ToDouble(bytes, 0);");
+                }
+                else // for ReadOnlyNotApply variant
+                {
+                    sb.Append(indent).AppendLine("\tvar value = BitConverter.ToDouble(bytes, 0);");
+                }
+            }
+            else if (memberTypeFullName == typeof(UnityEngine.Vector2).FullName || memberTypeFullName == typeof(UnityEngine.Vector3).FullName || memberTypeFullName == typeof(UnityEngine.Vector4).FullName || memberTypeFullName == typeof(UnityEngine.Quaternion).FullName)
+            {
+                sb.Append(indent).AppendLine("\tIGONetAutoMagicalSync_CustomSerializer customSerializer = cachedCustomSerializers[" + iOverall + "];");
+                if (isDeserializeAll)
+                {
+                    sb.Append(indent).Append("\tvar value = customSerializer.Deserialize(bitStream_readFrom).").Append(memberTypeFullName.Replace(".", "_")).AppendLine(";");
+                    if (singleMember.attribute.QuantizeDownToBitCount > 0)
+                    {
+                        sb.Append(indent).Append("\tvalue += valuesChangesSupport[").Append(iOverall).Append("].baselineValue_current.").Append(memberTypeFullName.Replace(".", "_")).AppendLine(";");
+                    }
+                    // For DeserializeAll, apply the value directly
+                    if (singleMember.animatorControllerParameterId == 0)
+                    {
+                        sb.Append(indent).Append("\t").Append(single.componentTypeName).Append(".").Append(singleMember.memberName).AppendLine(" = value;");
+                    }
+                    else
+                    {
+                        sb.Append(indent).Append("\t").Append(single.componentTypeName).Append(".Set").Append(singleMember.animatorControllerParameterMethodSuffix).Append("(").Append(singleMember.animatorControllerParameterId).Append(", value);");
+                    }
+                }
+                else if (readOnly) // ReadOnlyNotApply - extract specific type from GONetSyncableValue
+                {
+                    sb.Append(indent).Append("\tvar value = customSerializer.Deserialize(bitStream_readFrom).").Append(memberTypeFullName.Replace(".", "_")).AppendLine(";");
+                    if (singleMember.attribute.QuantizeDownToBitCount > 0)
+                    {
+                        sb.Append(indent).Append("\tvalue += valuesChangesSupport[").Append(iOverall).Append("].baselineValue_current.").Append(memberTypeFullName.Replace(".", "_")).AppendLine(";");
+                    }
+                }
+            }
+        }
+
+        private void WriteUpdateLastKnownValues()
+        {
+            sb.AppendLine("\t\tinternal override void UpdateLastKnownValues(GONetMain.SyncBundleUniqueGrouping onlyMatchIfUniqueGroupingMatches)");
+            sb.AppendLine("\t\t{");
+
+            int iOverall = 0;
+            int singleCount = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName.Length;
+            for (int iSingle = 0; iSingle < singleCount; ++iSingle)
+            {
+                GONetParticipant_ComponentsWithAutoSyncMembers_Single single = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName[iSingle];
+                int singleMemberCount = single.autoSyncMembers.Length;
+                for (int iSingleMember = 0; iSingleMember < singleMemberCount; ++iSingleMember)
+                {
+                    GONetParticipant_ComponentsWithAutoSyncMembers_SingleMember singleMember = single.autoSyncMembers[iSingleMember];
+
+                    // Check if this is a Rigidbody-aware member (position or rotation from Transform component)
+                    bool isTransformComponent = single.componentTypeFullName == "UnityEngine.Transform";
+                    bool isPositionMember = singleMember.memberName == "position";
+                    bool isRotationMember = singleMember.memberName == "rotation";
+                    bool isRigidbodyAwareMember = isTransformComponent && (isPositionMember || isRotationMember);
+
+                    sb.Append("\t\t\t\tvar valuesChangesSupport").Append(iOverall).Append(" = valuesChangesSupport[").Append(iOverall).AppendLine("];");
+
+                    sb.Append("\t\t\t\tif (DoesMatchUniqueGrouping(valuesChangesSupport").Append(iOverall).Append(", onlyMatchIfUniqueGroupingMatches) &&");
+                    sb.AppendLine();
+                    sb.Append("\t\t\t\t\t!ShouldSkipSync(valuesChangesSupport").Append(iOverall).Append(", ").Append(iOverall).AppendLine(")) // TODO examine eval order and performance...should this be first or last?, TODO also consider taking this check out of this condition alltogether, because it is perhaps more expensive to do this check than it is to just execute the body AND the body execution will not actually affect whether or not this value change will get sync'd or not..hmm...");
+                    sb.AppendLine("\t\t\t\t{");
+
+                    // CRITICAL FIX (Oct 2025): For velocity-eligible fields, save OLD current value to previous BEFORE updating current
+                    // This ensures velocity delta calculation (current - previous) uses consecutive sync values.
+                    //
+                    // Correct sequence (when grouping matches):
+                    //   1. previous = OLD current value (from last sync)
+                    //   2. current = NEW actual value (from this sync)
+                    //   3. Result: delta = NEW - OLD ✅
+                    //
+                    // IMPORTANT: This happens INSIDE the grouping check, so when grouping doesn't match,
+                    // neither previous nor current are updated (both remain unchanged from last matching sync).
+                    if (singleMember.attribute.IsVelocityEligible)
+                    {
+                        sb.Append("\t\t\t\t\t// Velocity-eligible: Save OLD current to previous BEFORE updating current\n");
+                        sb.Append("\t\t\t\t\tvaluesChangesSupport").Append(iOverall).Append(".lastKnownValue_previous_elapsedTicks = valuesChangesSupport").Append(iOverall).AppendLine(".lastKnownValue_elapsedTicks;");
+                        sb.Append("\t\t\t\t\tvaluesChangesSupport").Append(iOverall).Append(".lastKnownValue_previous = valuesChangesSupport").Append(iOverall).AppendLine(".lastKnownValue;");
+                        sb.AppendLine();
+                    }
+
+                    if (isRigidbodyAwareMember && singleMember.animatorControllerParameterId == 0)
+                    {
+                        // PHYSICS SYNC: For Transform.position/rotation, source from Rigidbody when appropriate (IsRigidBodyOwnerOnlyControlled).
+                        // This is filtered at call site (AutoMagicalSyncProcessing.Process()) - physics pipeline only calls this for physics objects.
+                        // So we check here to determine SOURCE (Rigidbody vs Transform), not to skip processing (that's done at call site).
+                        // NOTE: Using class field 'shouldSourceFromRigidbody' initialized in constructor.
+                        sb.AppendLine("\t\t\t\t\tif (shouldSourceFromRigidbody)");
+                        sb.AppendLine("\t\t\t\t\t{");
+                        sb.AppendLine("\t\t\t\t\t\t// Source from Rigidbody (physics simulation)");
+                        sb.Append("\t\t\t\t\t\tvaluesChangesSupport").Append(iOverall).Append(".lastKnownValue.").Append(singleMember.memberTypeFullName.Replace(".", "_")).Append(" = gonetParticipant.myRigidBody.").Append(singleMember.memberName).AppendLine(";");
+                        sb.AppendLine("\t\t\t\t\t}");
+                        sb.AppendLine("\t\t\t\t\telse");
+                        sb.AppendLine("\t\t\t\t\t{");
+                        sb.AppendLine("\t\t\t\t\t\t// Source from Transform (regular sync)");
+                        sb.Append("\t\t\t\t\t\tvaluesChangesSupport").Append(iOverall).Append(".lastKnownValue.").Append(singleMember.memberTypeFullName.Replace(".", "_")).Append(" = ").Append(single.componentTypeName).Append(".").Append(singleMember.memberName).AppendLine(";");
+                        sb.AppendLine("\t\t\t\t\t}");
+                    }
+                    else if (singleMember.animatorControllerParameterId == 0)
+                    {
+                        sb.Append("\t\t\t\t\tvaluesChangesSupport").Append(iOverall).Append(".lastKnownValue.").Append(singleMember.memberTypeFullName.Replace(".", "_")).Append(" = ").Append(single.componentTypeName).Append(".").Append(singleMember.memberName).AppendLine(";");
+                    }
+                    else
+                    {
+                        sb.Append("\t\t\t\t\tvaluesChangesSupport").Append(iOverall).Append(".lastKnownValue.").Append(singleMember.animatorControllerParameterTypeFullName.Replace(".", "_")).Append(" = ").Append(single.componentTypeName).Append(".Get").Append(singleMember.animatorControllerParameterMethodSuffix).Append("(").Append(singleMember.animatorControllerParameterId).AppendLine(");");
+                    }
+
+                    // Step 4: Save timestamp of NEW value (AFTER capturing it)
+                    // CRITICAL: ONLY position/rotation are physics-aware, everything else uses ElapsedTicks
+                    if (isRigidbodyAwareMember)
+                    {
+                        // For Transform.position/rotation, use RUNTIME check to determine time source
+                        // Physics objects (IsRigidBodyOwnerOnlyControlled) update in FixedUpdate → use FixedElapsedTicks
+                        // Non-physics objects update in LateUpdate → use ElapsedTicks
+                        sb.Append("\t\t\t\t\tvaluesChangesSupport").Append(iOverall).AppendLine(".lastKnownValue_elapsedTicks = shouldSourceFromRigidbody ? GONetMain.Time.FixedElapsedTicks : GONetMain.Time.ElapsedTicks;");
+                    }
+                    else
+                    {
+                        // All other members (not position/rotation): ALWAYS use ElapsedTicks (non-physics timing)
+                        sb.Append("\t\t\t\t\tvaluesChangesSupport").Append(iOverall).AppendLine(".lastKnownValue_elapsedTicks = GONetMain.Time.ElapsedTicks;");
+                    }
+
+                    sb.AppendLine("\t\t\t\t}");
+                    sb.AppendLine();
+
+                    iOverall++;
+                }
+            }
+
+            sb.AppendLine("\t\t}");
+            sb.AppendLine();
+        }
+
+        private void WriteIsLastKnownValue_VeryCloseTo_Or_AlreadyOutsideOf_QuantizationRange()
+        {
+            sb.AppendLine("\t\tinternal override bool IsLastKnownValue_VeryCloseTo_Or_AlreadyOutsideOf_QuantizationRange(byte singleIndex, GONetMain.AutoMagicalSync_ValueMonitoringSupport_ChangedValue valueChangeSupport)");
+            sb.AppendLine("\t\t{");
+            sb.AppendLine("\t\t\tswitch (singleIndex)");
+            sb.AppendLine("\t\t\t{");
+
+            int iOverall = 0;
+            int singleCount = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName.Length;
+            for (int iSingle = 0; iSingle < singleCount; ++iSingle)
+            {
+                GONetParticipant_ComponentsWithAutoSyncMembers_Single single = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName[iSingle];
+                int singleMemberCount = single.autoSyncMembers.Length;
+                for (int iSingleMember = 0; iSingleMember < singleMemberCount; ++iSingleMember)
+                {
+                    GONetParticipant_ComponentsWithAutoSyncMembers_SingleMember singleMember = single.autoSyncMembers[iSingleMember];
+
+                    sb.Append("\t\t\t\tcase ").Append(iOverall).AppendLine(":");
+                    sb.Append("\t\t\t\t{ // ").Append(single.componentTypeName).Append(".").AppendLine(singleMember.memberName);
+
+                    string memberTypeFullName = singleMember.memberTypeFullName;
+                    if (memberTypeFullName == typeof(float).FullName || singleMember.animatorControllerParameterTypeFullName == typeof(float).FullName)
+                    {
+                        string typeField = singleMember.animatorControllerParameterId == 0 ? singleMember.memberTypeFullName.Replace(".", "_") : singleMember.animatorControllerParameterTypeFullName.Replace(".", "_");
+                        sb.Append("                    System.Single diff = valueChangeSupport.lastKnownValue.").Append(typeField).Append(" - valueChangeSupport.baselineValue_current.").Append(typeField).AppendLine(";");
+                        sb.AppendLine("\t\t\t\t\tSystem.Single componentLimitLower = valueChangeSupport.syncAttribute_QuantizerSettingsGroup.lowerBound * 0.8f; // TODO cache this value");
+                        sb.AppendLine("\t\t\t\t\tSystem.Single componentLimitUpper = valueChangeSupport.syncAttribute_QuantizerSettingsGroup.upperBound * 0.8f; // TODO cache this value");
+                        sb.AppendLine("                    bool isVeryCloseTo_Or_AlreadyOutsideOf_QuantizationRange = diff < componentLimitLower || diff > componentLimitUpper;");
+                        sb.AppendLine("\t\t\t\t\treturn isVeryCloseTo_Or_AlreadyOutsideOf_QuantizationRange;");
+                    }
+                    else if (memberTypeFullName == typeof(UnityEngine.Vector3).FullName)
+                    {
+                        sb.Append("                    UnityEngine.Vector3 diff = valueChangeSupport.lastKnownValue.").Append(memberTypeFullName.Replace(".", "_")).Append(" - valueChangeSupport.baselineValue_current.").Append(memberTypeFullName.Replace(".", "_")).AppendLine(";");
+                        sb.AppendLine("\t\t\t\t\tSystem.Single componentLimitLower = valueChangeSupport.syncAttribute_QuantizerSettingsGroup.lowerBound * 0.8f; // TODO cache this value");
+                        sb.AppendLine("\t\t\t\t\tSystem.Single componentLimitUpper = valueChangeSupport.syncAttribute_QuantizerSettingsGroup.upperBound * 0.8f; // TODO cache this value");
+                        sb.AppendLine("                    bool isVeryCloseTo_Or_AlreadyOutsideOf_QuantizationRange = ");
+                        sb.AppendLine("\t\t\t\t\t\tdiff.x < componentLimitLower || diff.x > componentLimitUpper ||");
+                        sb.AppendLine("\t\t\t\t\t\tdiff.y < componentLimitLower || diff.y > componentLimitUpper ||");
+                        sb.AppendLine("\t\t\t\t\t\tdiff.z < componentLimitLower || diff.z > componentLimitUpper;");
+                        sb.AppendLine("\t\t\t\t\treturn isVeryCloseTo_Or_AlreadyOutsideOf_QuantizationRange;");
+                    }
+                    else
+                    {
+                        sb.AppendLine("\t\t\t\t\t// this type not supported for this functionality");
+                    }
+
+                    sb.AppendLine("\t\t\t\t}");
+                    sb.AppendLine("\t\t\t\tbreak;");
+                    sb.AppendLine();
+
+                    ++iOverall;
+                }
+            }
+
+            sb.AppendLine("\t\t\t}");
+            sb.AppendLine();
+            sb.AppendLine("\t\t\treturn false;");
+            sb.AppendLine("\t\t}");
+            sb.AppendLine();
+        }
+
+        private void WriteCreateNewBaselineValueEvent()
+        {
+            sb.AppendLine("        internal override ValueMonitoringSupport_NewBaselineEvent CreateNewBaselineValueEvent(uint gonetId, byte singleIndex, GONetSyncableValue newBaselineValue)");
+            sb.AppendLine("\t\t{");
+            sb.AppendLine("\t\t\tswitch (singleIndex)");
+            sb.AppendLine("\t\t\t{");
+
+            int iOverall = 0;
+            int singleCount = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName.Length;
+            for (int iSingle = 0; iSingle < singleCount; ++iSingle)
+            {
+                GONetParticipant_ComponentsWithAutoSyncMembers_Single single = uniqueEntry.ComponentMemberNames_By_ComponentTypeFullName[iSingle];
+                int singleMemberCount = single.autoSyncMembers.Length;
+                for (int iSingleMember = 0; iSingleMember < singleMemberCount; ++iSingleMember)
+                {
+                    GONetParticipant_ComponentsWithAutoSyncMembers_SingleMember singleMember = single.autoSyncMembers[iSingleMember];
+
+                    sb.Append("\t\t\t\tcase ").Append(iOverall).AppendLine(":");
+                    sb.Append("\t\t\t\t{ // ").Append(single.componentTypeName).Append(".").AppendLine(singleMember.memberName);
+
+                    if (singleMember.animatorControllerParameterId == 0)
+                    {
+                        sb.Append("\t\t\t\t\treturn new ValueMonitoringSupport_NewBaselineEvent_").Append(singleMember.memberTypeFullName.Replace(".", "_")).AppendLine("() {");
+                        sb.AppendLine("\t\t\t\t\t\tGONetId = gonetId,");
+                        sb.AppendLine("\t\t\t\t\t\tValueIndex = singleIndex,");
+                        sb.Append("\t\t\t\t\t\tNewBaselineValue = newBaselineValue.").Append(singleMember.memberTypeFullName.Replace(".", "_")).AppendLine();
+                        sb.AppendLine("\t\t\t\t\t};");
+                    }
+                    else
+                    {
+                        sb.Append("\t\t\t\t\treturn new ValueMonitoringSupport_NewBaselineEvent_").Append(singleMember.animatorControllerParameterTypeFullName.Replace(".", "_")).AppendLine("() {");
+                        sb.AppendLine("\t\t\t\t\t\tGONetId = gonetId,");
+                        sb.AppendLine("\t\t\t\t\t\tValueIndex = singleIndex,");
+                        sb.Append("\t\t\t\t\t\tNewBaselineValue = newBaselineValue.").Append(singleMember.animatorControllerParameterTypeFullName.Replace(".", "_")).AppendLine();
+                        sb.AppendLine("\t\t\t\t\t};");
+                    }
+
+                    sb.AppendLine("\t\t\t\t}");
+                    sb.AppendLine();
+
+                    ++iOverall;
+                }
+            }
+
+            sb.AppendLine("\t\t\t}");
+            sb.AppendLine();
+            sb.AppendLine("\t\t\treturn null;");
+            sb.AppendLine("\t\t}");
+        }
+
+        private void WriteClassClose()
+        {
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+        }
+
+        /// <summary>
+        /// Dynamically calculates velocity quantization settings from VALUE quantization settings.
+        /// Velocity range should match quantization step size (sub-quantization motion detection).
+        /// </summary>
+        private (float lowerBound, float upperBound, int bitCount) CalculateVelocityQuantizationSettings(
+            float valueLowerBound,
+            float valueUpperBound,
+            int valueBitCount,
+            float syncChangesEverySeconds,
+            int physicsUpdateInterval,
+            bool isQuaternion)
+        {
+            // Determine sync interval (used by both Quaternion and standard calculation)
+            // NOTE: At code generation time (editor), UnityEngine.Time.fixedDeltaTime is 0!
+            // Read the actual fixedDeltaTime from Project Settings → Time.
+            float fixedDeltaTime = 0.02f; // Default Unity value (50Hz)
+            try
+            {
+                // Unity 6 Fix: Parse TimeManager.asset directly as text instead of using SerializedProperty
+                // SerializedProperty.floatValue throws "type is not a supported float value" in Unity 6
+                string timeManagerPath = System.IO.Path.Combine(UnityEngine.Application.dataPath, "..", "ProjectSettings", "TimeManager.asset");
+                if (System.IO.File.Exists(timeManagerPath))
+                {
+                    string[] lines = System.IO.File.ReadAllLines(timeManagerPath);
+                    foreach (string line in lines)
+                    {
+                        if (line.Contains("Fixed Timestep:"))
+                        {
+                            // Parse: "  Fixed Timestep: 0.02"
+                            string[] parts = line.Split(':');
+                            if (parts.Length == 2 && float.TryParse(parts[1].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float parsed))
+                            {
+                                fixedDeltaTime = parsed;
+                                break;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    GONetLog.Warning($"TimeManager.asset not found at {timeManagerPath}. Using default fixed delta time.");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                GONetLog.Error($"Unable to get actual fixed delta time from project settings. Fallback value will be used, but THAT IS DANGEROUS for quality - things WILL NOT BE CALCULATED PERFECTLY! Error: {ex.Message}");
+                // Fallback to default if we can't read project settings
+                fixedDeltaTime = 0.02f;
+            }
+
+            //
+            // CRITICAL FIX (Oct 2025): Always use SyncChangesEverySeconds for velocity bounds calculation.
+            //
+            // PhysicsUpdateInterval is a RUNTIME gating mechanism (decides WHEN to sync), not a sync frequency.
+            // At code generation time, we don't know if Transform.position will be on a physics or non-physics object.
+            //
+            // KEY INSIGHT: Velocity bounds MUST match the CONFIGURED sync frequency (SyncChangesEverySeconds),
+            // which is the frequency used for:
+            // - Change detection
+            // - Bundle generation
+            // - Client expectations
+            //
+            // Runtime physics gating (PhysicsUpdateInterval) is handled separately in GONet.cs (IsPositionNotSyncd, IsRotationNotSyncd).
+            // The generated code already has runtime detection for per-interval bounds (see velocityQuantizeLowerBound_PerSyncInterval).
+            //
+            // Example (Transform.position with 24 Hz sync, PhysicsUpdateInterval=3):
+            // - Non-physics object: Syncs at 24 Hz (0.04167s) → bounds = valuePrecision / 0.04167s ✅
+            // - Physics object: Syncs at 24 Hz (0.04167s), gated every 3rd FixedUpdate → SAME bounds ✅
+            //   (Runtime detection multiplies by correct interval for per-sync bounds)
+            //
+            // OLD APPROACH (WRONG): Used max(physicsInterval, nonPhysicsInterval) which made bounds too narrow
+            // for non-physics objects and coupled them to Unity's Fixed Timestep.
+            //
+            float syncInterval = syncChangesEverySeconds;
+
+            if (syncInterval <= 0.0001f)
+            {
+                syncInterval = 0.033f; // Fallback to 30 Hz
+            }
+            // DEBUG: Log calculation details
+            UnityEngine.Debug.Log($"[VelocityCalc] syncChangesEverySeconds={syncChangesEverySeconds}, syncInterval={syncInterval}, isQuaternion={isQuaternion}, valueLowerBound={valueLowerBound}, valueUpperBound={valueUpperBound}, valueBitCount={valueBitCount}");
+
+
+            // Special handling for Quaternion (angular velocity) - Option B: Exact calculation
+            if (isQuaternion)
+            {
+                // Quaternion smallest-3 compression:
+                // - 3 components quantized over range ±(1/√2) ≈ ±0.7071
+                // - 4th component reconstructed using sqrt(1 - a² - b² - c²)
+                // - Each component uses 'valueBitCount' bits (typically 9)
+
+                // IMPORTANT: QuaternionSerializer ignores profile's QuantizeDownToBitCount (usually 0)
+                // and uses its own DEFAULT_BITS_PER_SMALLEST_THREE = 9. We must match this behavior.
+                int actualBitCount = valueBitCount > 0 ? valueBitCount : QuaternionSerializer.DEFAULT_BITS_PER_SMALLEST_THREE;
+
+                float quatComponentRange = 2.0f / QuaternionSerializer.SQUARE_ROOT_OF_2;  // Full range: 1.4142 (from -0.7071 to +0.7071)
+
+                // Calculate precision per quantization step for one quaternion component
+                int quantizationSteps = (1 << actualBitCount) - 1;  // e.g., 511 steps for 9 bits
+                float quatComponentPrecision = quatComponentRange / quantizationSteps;
+
+                // Calculate minimum angular change from quantization (exact, not linearized)
+                // Test all 3 smallest components to find worst-case angular precision
+                float minAnglePrecisionRad = float.MaxValue;
+
+                for (int component = 0; component < 3; component++)
+                {
+                    // Construct test quaternion with one component at precision limit
+                    float a = (component == 0) ? quatComponentPrecision : 0f;
+                    float b = (component == 1) ? quatComponentPrecision : 0f;
+                    float c = (component == 2) ? quatComponentPrecision : 0f;
+
+                    // Calculate largest component using quaternion normalization: w² + x² + y² + z² = 1
+                    float largestSquared = 1.0f - (a * a + b * b + c * c);
+                    float largest = UnityEngine.Mathf.Sqrt(UnityEngine.Mathf.Max(0f, largestSquared));
+
+                    // Calculate rotation angle: θ = 2 * arccos(w) where w is the largest component
+                    // (assumes largest is 'w', but result is same for any component due to symmetry)
+                    float angle = 2.0f * UnityEngine.Mathf.Acos(UnityEngine.Mathf.Clamp(largest, -1f, 1f));
+
+                    minAnglePrecisionRad = UnityEngine.Mathf.Min(minAnglePrecisionRad, angle);
+                }
+
+                // Calculate maximum angular velocity from angular precision / sync interval
+                float maxAngularVelocityRad = minAnglePrecisionRad / syncInterval;
+
+                // Use same bit count as VALUE quantization (actualBitCount, typically 9 bits)
+                int angularVelocityBitCount = actualBitCount;
+
+                // DEBUG: Log quaternion velocity calculation details
+                UnityEngine.Debug.Log($"[QuaternionVelocityCalc] valueBitCount={valueBitCount}, actualBitCount={actualBitCount}, quatComponentPrecision={quatComponentPrecision:F6}, " +
+                                      $"minAnglePrecisionRad={minAnglePrecisionRad:F6} ({minAnglePrecisionRad * UnityEngine.Mathf.Rad2Deg:F4}°), " +
+                                      $"syncInterval={syncInterval:F4}s, maxAngularVelocityRad={maxAngularVelocityRad:F6} ({maxAngularVelocityRad * UnityEngine.Mathf.Rad2Deg:F4}°/s), " +
+                                      $"angularVelocityBitCount={angularVelocityBitCount}");
+
+                return (-maxAngularVelocityRad, maxAngularVelocityRad, angularVelocityBitCount);
+            }
+
+            // Standard position/scalar velocity calculation
+            if (valueBitCount == 0 || valueLowerBound >= valueUpperBound)
+            {
+                // No quantization or invalid range - fallback to defaults
+                return (-20f, 20f, 18);
+            }
+
+            // Calculate VALUE precision (quantization step size in value units per sync interval)
+            float valueRange = valueUpperBound - valueLowerBound;
+            float valuePrecision = valueRange / ((1 << valueBitCount) - 1);
+
+            // Convert quantization step to equivalent velocity (value-units per SECOND)
+            // This value will be multiplied by deltaTime at line 265-266 to get per-interval bounds
+            // for runtime range checking.
+            //
+            // CRITICAL: No safety margin! We want to detect movements smaller than ONE quantization step.
+            // Example: Transform.position with 18-bit quantization over [-125, 125], syncInterval=0.075s
+            // → valuePrecision = 250 / (2^18 - 1) ≈ 0.000954 meters (~0.95mm per step)
+            // → maxSubQuantizationVelocity = 0.000954 / 0.075 ≈ 0.0127 m/s
+            // → Runtime bounds (after * deltaTime): 0.0127 * 0.075 = 0.000954 meters (one quantization step!)
+            float maxSubQuantizationVelocity = valuePrecision / syncInterval;
+
+            // For dynamic mode (sub-quantization detection), use FULL VALUE precision
+            // Velocity deltas must have same resolution as position quantization to accurately
+            // detect movements smaller than one quantization step
+            //
+            // Example: Transform.position with 18-bit quantization (1mm precision)
+            // → Velocity should also use 18 bits to accurately represent 1mm deltas
+            // → This ensures sub-millimeter velocities can be transmitted without loss
+            //
+            // For manual mode, this method isn't called (user specifies bit count directly)
+            int bitCount = valueBitCount;
+
+            return (-maxSubQuantizationVelocity, maxSubQuantizationVelocity, bitCount);
+        }
+    }
+}
+ 

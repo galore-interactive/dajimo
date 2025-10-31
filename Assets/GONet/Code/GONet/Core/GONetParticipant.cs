@@ -57,10 +57,23 @@ namespace GONet
         [SerializeField]
         internal string UnityGuid;
 
+        private GONetCodeGenerationId? cachedCodeGenerationId;
+
         public GONetCodeGenerationId CodeGenerationId
         {
-            get => GONetSpawnSupport_Runtime.GetDesignTimeMetadata(this).CodeGenerationId;
-            internal set => GONetSpawnSupport_Runtime.GetDesignTimeMetadata(this).CodeGenerationId = value;
+            get
+            {
+                if (!cachedCodeGenerationId.HasValue)
+                {
+                    cachedCodeGenerationId = GONetSpawnSupport_Runtime.GetDesignTimeMetadata(this).CodeGenerationId;
+                }
+                return cachedCodeGenerationId.Value;
+            }
+            internal set
+            {
+                GONetSpawnSupport_Runtime.GetDesignTimeMetadata(this).CodeGenerationId = value;
+                cachedCodeGenerationId = value; // Update cache when value is set
+            }
         }
 
         [Serializable]
@@ -211,6 +224,137 @@ namespace GONet
         /// </para>
         /// </summary>
         public bool ShouldHideDuringRemoteInstantiate;
+
+        /// <summary>
+        /// <para>
+        /// If true, automatically calls <see cref="UnityEngine.Object.DontDestroyOnLoad(UnityEngine.Object)"/> on this GameObject when instantiated.
+        /// This ensures the object persists across scene changes.
+        /// </para>
+        /// <para>
+        /// <b>IMPORTANT:</b> This flag must be set BEFORE the GONetParticipant is enabled/started.
+        /// For runtime-spawned objects, set this in the prefab or immediately after instantiation before GONet processes it.
+        /// For scene-defined objects, set this in the inspector.
+        /// </para>
+        /// <para>
+        /// <b>NOTE:</b> GONet uses this flag to properly track which scene spawns belong to.
+        /// If you manually call DontDestroyOnLoad() without setting this flag, GONet may incorrectly
+        /// associate the object with a scene during late-joiner synchronization.
+        /// </para>
+        /// </summary>
+        [Tooltip("If true, automatically calls DontDestroyOnLoad on this GameObject when instantiated. Must be set before GONetParticipant is enabled.")]
+        public bool AutoDontDestroyOnLoad;
+
+        #region CLIENT LIMBO MODE CONFIGURATION (Advanced - Rarely Needed)
+
+        /// <summary>
+        /// CLIENT ONLY: Override project-wide limbo behavior for THIS prefab when GONetId batch is exhausted.
+        ///
+        /// IMPORTANT: Limbo is RARE - only occurs during extreme rapid spawning (100+ spawns/sec).
+        /// Most games will NEVER encounter this. Only configure if spawning at massive rates.
+        ///
+        /// Leave unchecked to use GONet Project Settings default.
+        /// Check to override with custom behavior for this specific prefab.
+        /// </summary>
+        [Header("Client Batch Limbo Override (Advanced - Rarely Needed)")]
+        [Tooltip("Override project-wide limbo behavior for THIS prefab when batch IDs exhausted.\n\n" +
+                 "IMPORTANT: Limbo is RARE - only during extreme rapid spawning (100+ spawns/sec).\n\n" +
+                 "Unchecked = Use GONet Project Settings default\n" +
+                 "Checked = Use custom mode below for this prefab")]
+        public bool client_overrideLimboMode = false;
+
+        /// <summary>
+        /// CLIENT ONLY: Custom limbo mode for this prefab (only used if client_overrideLimboMode is true).
+        /// See <see cref="Client_GONetIdBatchLimboMode"/> for mode descriptions.
+        /// </summary>
+        [Tooltip("Custom limbo mode for this prefab (only if Override checkbox is checked).\n\n" +
+                 "See CLIENT_LIMBO_MODE_IMPLEMENTATION_PLAN.md for details on each mode.")]
+        public Client_GONetIdBatchLimboMode client_limboMode = Client_GONetIdBatchLimboMode.InstantiateInLimboWithAutoDisableRenderingAndPhysics;
+
+        #endregion
+
+        #region CLIENT LIMBO STATE TRACKING (Internal - Do Not Modify)
+
+        /// <summary>
+        /// CLIENT ONLY: Is this object in "limbo" state?
+        /// Limbo = exists locally but has no GONetId (waiting for batch from server).
+        /// Object is NOT networked, cannot sync, cannot receive RPCs.
+        /// Will "graduate" to networked when batch arrives.
+        /// </summary>
+        public bool Client_IsInLimbo => client_isInLimbo;
+
+        // INTERNAL TRACKING - DO NOT MODIFY THESE FIELDS
+        [NonSerialized] internal bool client_isInLimbo = false;
+
+        // Option 1 tracking (DisableAll):
+        [NonSerialized] internal List<MonoBehaviour> client_limboDisabledComponents;
+
+        // Option 2 tracking (DisableRenderingAndPhysics):
+        [NonSerialized] internal List<Renderer> client_limboDisabledRenderers;
+        [NonSerialized] internal List<Collider> client_limboDisabledColliders;
+        [NonSerialized] internal List<Collider2D> client_limboDisabledColliders2D;
+        [NonSerialized] internal Rigidbody client_limboRigidbody;
+        [NonSerialized] internal Rigidbody2D client_limboRigidbody2D;
+        [NonSerialized] internal bool client_limboRigidbodyWasKinematic;
+        [NonSerialized] internal RigidbodyType2D client_limboRigidbody2DOriginalType;
+
+        #endregion
+
+        #region LIFECYCLE TRACKING FOR ONGONETREADY (Internal - Do Not Modify)
+
+        /// <summary>
+        /// Tracks Unity lifecycle completion state for OnGONetReady gate.
+        /// OnGONetReady will NOT fire until both didAwakeComplete and didStartComplete are true.
+        /// </summary>
+        [NonSerialized] internal bool didAwakeComplete = false;
+        [NonSerialized] internal bool didStartComplete = false;
+
+        /// <summary>
+        /// Tracks whether DeserializeInitAllCompleted is required for this participant.
+        ///
+        /// TRUE for:
+        /// - Scene-defined objects with IsMine = false (clients receiving sync from server)
+        /// - Runtime spawns received via InstantiateGONetParticipantEvent (remote spawns)
+        ///
+        /// FALSE for:
+        /// - Scene-defined objects with IsMine = true (server authority, no deserialization needed)
+        /// - Runtime spawns with IsMine = true (local authority, spawned by this machine)
+        /// - Limbo objects (local authority, client spawned)
+        /// </summary>
+        [NonSerialized] internal bool requiresDeserializeInit = false;
+
+        /// <summary>
+        /// Tracks whether DeserializeInitAllCompleted has occurred.
+        /// Only relevant if requiresDeserializeInit = true.
+        /// </summary>
+        [NonSerialized] internal bool didDeserializeInitComplete = false;
+
+        /// <summary>
+        /// Tracks whether OnGONetReady has already been called for this participant.
+        /// Prevents duplicate calls across multiple gate check invocations.
+        /// </summary>
+        [NonSerialized] internal bool didOnGONetReadyFire = false;
+
+        /// <summary>
+        /// Marks this participant as requiring DeserializeInitAllCompleted before OnGONetReady.
+        /// Called for objects that will receive remote sync data.
+        /// </summary>
+        internal void MarkRequiresDeserializeInit()
+        {
+            requiresDeserializeInit = true;
+            // Don't check gate yet - deserialization hasn't happened
+        }
+
+        /// <summary>
+        /// Marks DeserializeInitAllCompleted as complete and checks OnGONetReady gate.
+        /// Called when remote sync data has been processed.
+        /// </summary>
+        internal void MarkDeserializeInitComplete()
+        {
+            didDeserializeInitComplete = true;
+            GONetMain.CheckAndPublishOnGONetReady_IfAllConditionsMet(this);
+        }
+
+        #endregion
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void OnGONetIdComponentChanged_UpdateAllComponents_IfAppropriate(bool isOwnerAuthorityIdKnownToBeGoodValueNow, uint gonetId_priorToChanges)
@@ -453,20 +597,57 @@ namespace GONet
 #if UNITY_EDITOR
         private void OnValidate()
         {
-            if (!EditorApplication.isPlaying && 
+            // Conservative logging to understand OnValidate context
+            // Removed verbose debug logging that was spamming console
+
+            if (!EditorApplication.isPlaying &&
                 !EditorApplication.isPlayingOrWillChangePlaymode &&
                  !isExitingPlayMode &&
                  !isGenerating)
             {
-                // TODO maybe this should be used for property change identification!!!!!
-                //GONetLog.Debug($"GONetParticipant was added or changed on GameObject: {gameObject.name} (Design-time only).");
+                // Validation proceeding after guard conditions
 
-                if (IsInPrefabPreviewMode())
+                // Check prefab context with detailed logging
+                bool isInPrefabPreview = IsInPrefabPreviewMode();
+                // Checked prefab preview mode
+
+                // Log scene information
+                var scene = gameObject?.scene;
+                if (scene.HasValue)
                 {
-                    GONetLog.Debug($"GONetParticipant was validated on GameObject: {gameObject.name} (Design-time only).");
+                    // Scene context checked
+                }
+
+                // Log prefab information
+                if (gameObject != null)
+                {
+                    bool isPartOfAnyPrefab = UnityEditor.PrefabUtility.IsPartOfAnyPrefab(gameObject);
+                    var assetType = UnityEditor.PrefabUtility.GetPrefabAssetType(gameObject);
+                    string assetPath = UnityEditor.AssetDatabase.GetAssetPath(gameObject);
+
+                    // Prefab context checked
+                }
+
+                // Additional filtering: Only trigger OnValidateEditor if this appears to be a genuine user interaction
+                // Skip if we're currently in asset database operations or if the inspector isn't visible
+                bool isLikelyUserInteraction = IsLikelyUserInitiatedValidation();
+                // User interaction detection completed
+
+                if (isInPrefabPreview || isLikelyUserInteraction)
+                {
+                    // Triggering OnValidateEditor event
+                    // Trigger OnValidateEditor event for property change detection
+                    OnValidateEditor?.Invoke(this);
+                }
+                else
+                {
+                    // Skipping OnValidateEditor event (not user-initiated)
                 }
             }
-
+            else
+            {
+                // OnValidate skipped due to guard conditions
+            }
 
             /* option used in editor namespace code only....here for reference
                          bool isHappeningDueToExitingPlayModeInEditor =
@@ -483,52 +664,159 @@ namespace GONet
             {
                 //GONetLog.Debug($"GONetParticipant was added or changed on GameObject: {gameObject.name} (Design-time only).");
             }
-*/
+            */
+        }
+
+        /// <summary>
+        /// Attempts to determine if the current OnValidate call is likely due to user interaction
+        /// rather than internal Unity asset loading/scanning operations.
+        /// </summary>
+        private bool IsLikelyUserInitiatedValidation()
+        {
+            // Check if we're currently refreshing or importing assets
+            if (EditorApplication.isUpdating)
+            {
+                return false; // Asset database is updating
+            }
+
+            // Check if AssetDatabase is currently refreshing
+            if (UnityEditor.AssetDatabase.IsAssetImportWorkerProcess())
+            {
+                return false; // We're in an asset import worker process
+            }
+
+            // Check if we're in a prefab stage (double-click editing)
+            var currentPrefabStage = UnityEditor.SceneManagement.PrefabStageUtility.GetCurrentPrefabStage();
+            if (currentPrefabStage != null)
+            {
+                // If we're in prefab stage mode, only count it as user interaction if this GameObject
+                // is actually part of the prefab being edited, not just loaded during asset scanning
+                try
+                {
+                    if (currentPrefabStage.IsPartOfPrefabContents(gameObject))
+                    {
+                        return true; // This GameObject is part of the prefab being edited
+                    }
+                    else
+                    {
+                        // This GameObject is NOT part of the prefab being edited - likely Unity's internal loading
+                        // during asset scanning while another prefab is open
+                        return false;
+                    }
+                }
+                catch (System.InvalidOperationException)
+                {
+                    // Can't check during Awake/OnEnable - be conservative
+                    return false;
+                }
+            }
+
+            // Use a simple heuristic: if the object is selected in the project or hierarchy,
+            // and we're not in the middle of a batch operation, it's likely user interaction
+            if (UnityEditor.Selection.activeGameObject == gameObject ||
+                UnityEditor.Selection.Contains(gameObject))
+            {
+                return true; // Object is currently selected - likely user interaction
+            }
+
+            // Check if this object's asset is selected in the project window
+            if (gameObject != null)
+            {
+                string assetPath = UnityEditor.AssetDatabase.GetAssetPath(gameObject);
+                if (!string.IsNullOrEmpty(assetPath))
+                {
+                    var assetObject = UnityEditor.AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(assetPath);
+                    if (UnityEditor.Selection.Contains(assetObject))
+                    {
+                        return true; // Asset is selected in project window
+                    }
+                }
+            }
+
+            // If none of the above conditions are met, it's likely an internal Unity operation
+            return false;
         }
 
         private bool IsInPrefabPreviewMode()
         {
-            /* reference for troubleshooting
-            GameObject prefabSource = PrefabUtility.GetCorrespondingObjectFromSource(gameObject);
-            GameObject prefabRoot = PrefabUtility.GetNearestPrefabInstanceRoot(gameObject);
-            var magoo = PrefabUtility.GetOriginalSourceRootWhereGameObjectIsAdded(gameObject);
-            var slgo = PrefabUtility.GetOutermostPrefabInstanceRoot(gameObject);
-            var dickl = PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(gameObject);
-            var kk = PrefabUtility.GetPrefabAssetType(gameObject);
-            var jjjdfi = PrefabUtility.GetPrefabInstanceHandle(gameObject);
-            var iiiss = PrefabUtility.IsAnyPrefabInstanceRoot(gameObject);
-            var eee = PrefabUtility.IsOutermostPrefabInstanceRoot(gameObject);
-            var any = PrefabUtility.IsPartOfAnyPrefab(gameObject);
-            */
+            // IMPORTANT: Use the SAME logic as IsLikelyUserInitiatedValidation for consistency
+            // This prevents the regression loop where these two methods give conflicting results
 
-            // Check if the object is part of any prefab
-            if (PrefabUtility.IsPartOfAnyPrefab(gameObject))
+            // Check if we're in a prefab stage (double-click editing)
+            var currentPrefabStage = UnityEditor.SceneManagement.PrefabStageUtility.GetCurrentPrefabStage();
+            if (currentPrefabStage != null)
+            {
+                // If we're in prefab stage mode, only count it as preview mode if this GameObject
+                // is actually part of the prefab being edited, not just loaded during asset scanning
+                try
+                {
+                    if (currentPrefabStage.IsPartOfPrefabContents(gameObject))
+                    {
+                        return true; // This GameObject is part of the prefab being edited
+                    }
+                    else
+                    {
+                        // This GameObject is NOT part of the prefab being edited - not preview mode
+                        return false;
+                    }
+                }
+                catch (System.InvalidOperationException)
+                {
+                    // Can't check during Awake/OnEnable - be conservative
+                    return false;
+                }
+            }
+
+            // Check if this is single-click inspector editing (no prefab stage active)
+            if (UnityEditor.PrefabUtility.IsPartOfAnyPrefab(gameObject))
             {
                 // Check if the object is in an unloaded or temporary scene (scene path is null or empty)
                 if (!gameObject.scene.isLoaded && string.IsNullOrEmpty(gameObject.scene.path))
                 {
                     // Additional check: confirm that there's a valid asset path for the nearest instance root
-                    string assetPath = PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(gameObject);
+                    string assetPath = UnityEditor.PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(gameObject);
                     if (!string.IsNullOrEmpty(assetPath))
                     {
-                        return true; // Confirmed to be in Prefab Preview Mode
+                        return true; // Confirmed to be in Prefab Preview Mode (single-click)
                     }
                 }
             }
 
             return false; // Not in Prefab Preview Mode
         }
+#endif
 
         /// <summary>
         /// NOTE: This will NOT be called when this was added to a GO on a prefab when in Prefab Preview (i.e., in-context editing) mode!
         /// </summary>
         public static event GNPDelegate OnAwakeEditor;
-#endif
+
+        /// <summary>
+        /// Called when OnEnable is invoked in edit mode (design time).
+        /// Allows for detection of GONetParticipant enable/disable state changes during development.
+        /// </summary>
+        public static event GNPDelegate OnEnableEditor;
+
+        /// <summary>
+        /// Called when OnDisable is invoked in edit mode (design time).
+        /// Allows for detection of GONetParticipant enable/disable state changes during development.
+        /// </summary>
+        public static event GNPDelegate OnDisableEditor;
+
+        /// <summary>
+        /// Called when OnValidate is invoked in edit mode (design time).
+        /// Allows for detection of prefab asset property changes during Inspector editing.
+        /// </summary>
+        public static event GNPDelegate OnValidateEditor;
 
         private void Awake()
         {
             if (Application.isPlaying)
             {
+                // EARLIEST LIFECYCLE POINT: Log with InstanceID for correlation (GONetId not yet available)
+                // InstanceID allows correlation between Awake → OnGONetReady events in log analysis
+                //GONetLog.Info($"[GONetParticipant] 🔵 Awake() START - InstanceID: {GetInstanceID()}, GameObject: {gameObject.name}");
+
                 StartCoroutine(AwakeCoroutine());
             }
 #if UNITY_EDITOR
@@ -546,9 +834,13 @@ namespace GONet
 
             if (!IsInternallyConfigured)
             {
-                Debug.LogError($"{nameof(GONetParticipant)} on {nameof(GameObject)} with name:'{name}' is required to have {nameof(DesignTimeLocation)} and {nameof(CodeGenerationId)} set to a valid value.  One/both are not.  Therefore, this will be disabled.  GONet will automatically set these values.  Please ensure the scene has been saved and a game build is created so all server/clients have the new/same information.  If for some reason, this message appears even after creating a new game build, please go to the GONet => GONet Editor Support menu/window and click on 'Refresh GONet code generation', then once that completes re-run the game build and try again.");
+                GONetLog.Error($"{nameof(GONetParticipant)} on {nameof(GameObject)} with name:'{name}' is required to have {nameof(DesignTimeLocation)} and {nameof(CodeGenerationId)} set to a valid value.  One/both are not.  Therefore, this will be disabled.  GONet will automatically set these values.  Please ensure the scene has been saved and a game build is created so all server/clients have the new/same information.  If for some reason, this message appears even after creating a new game build, please go to the GONet => GONet Editor Support menu/window and click on 'Refresh GONet code generation' and/or 'Fix GONet Generated Code', then once that completes re-run the game build and try again.  **DEBUG**: DesignTimeLocation='{DesignTimeLocation}', CodeGenerationId={CodeGenerationId}, IsDesignTimeMetadataInitd={IsDesignTimeMetadataInitd}");
                 enabled = false;
             }
+
+            // LIFECYCLE GATE: Mark Awake complete and check if OnGONetReady can fire
+            didAwakeComplete = true;
+            GONetMain.CheckAndPublishOnGONetReady_IfAllConditionsMet(this);
         }
 
         /// <summary>
@@ -564,6 +856,13 @@ namespace GONet
         private void OnEnable()
         {
             GONetMain.OnEnable_StartMonitoringForAutoMagicalNetworking(this);
+
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+            {
+                OnEnableEditor?.Invoke(this);
+            }
+#endif
         }
 
         struct RigidBodySettings
@@ -571,7 +870,7 @@ namespace GONet
             public bool isKinematic;
             public bool useGravity;
         }
-        Rigidbody myRigidBody;
+        public Rigidbody myRigidBody;
         RigidBodySettings myRigidbodySettingsAtStart;
 
         struct RigidBody2DSettings
@@ -580,17 +879,13 @@ namespace GONet
             public bool simulated;
             public RigidbodyType2D bodyType;
         }
-        Rigidbody2D myRigidBody2D;
+        public Rigidbody2D myRigidBody2D;
         RigidBody2DSettings myRigidbody2DSettingsAtStart;
 
         private void Start()
         {
             if (Application.isPlaying) // now that [ExecuteInEditMode] was added to GONetParticipant for OnDestroy, we have to guard this to only run in play
             {
-                //const string GNPS = "GNP.Start() name: ";
-                //const string WAS = " WasInstantiated: ";
-                //GONetLog.Info(string.Concat(GNPS, gameObject.name, WAS, WasInstantiated));
-
                 if (!WasInstantiated) // NOTE: here in Start is the first point where we know the real/final value of WasInstantiated!
                 {
                     IsOKToStartAutoMagicalProcessing = true;
@@ -614,6 +909,10 @@ namespace GONet
 
                     SetRigidBodySettingsConsideringOwner();
                 }
+
+                // LIFECYCLE GATE: Mark Start complete and check if OnGONetReady can fire
+                didStartComplete = true;
+                GONetMain.CheckAndPublishOnGONetReady_IfAllConditionsMet(this);
             }
         }
 
@@ -634,8 +933,31 @@ namespace GONet
                 }
                 else
                 {
+                    // DIAGNOSTIC: Log BEFORE changes (WARNING level so it's never filtered)
+                    //GONetLog.Warning($"[GONetParticipant][DIAGNOSTIC] BEFORE kinematic change - '{name}' (GONetId: {GONetId}) isKinematic={myRigidBody.isKinematic}, useGravity={myRigidBody.useGravity}, constraints={myRigidBody.constraints}");
+
                     myRigidBody.isKinematic = true;
                     myRigidBody.useGravity = false;
+
+                    // DISABLE Unity's Rigidbody interpolation on clients (GONet's value blending handles smoothing)
+                    // Using Unity's interpolation creates double interpolation conflict with GONet's value blending,
+                    // causing stuttering/jittery motion. GONet's value blending already provides smooth interpolation
+                    // between network updates (50Hz), so Unity's interpolation is redundant and conflicts.
+                    myRigidBody.interpolation = RigidbodyInterpolation.None;
+
+                    // Clear constraints when becoming kinematic on non-authority clients
+                    // Rationale: Constraints are for physics simulation only. Since kinematic rigidbodies
+                    // are manually positioned (not physics-driven), constraints shouldn't apply.
+                    // If Unity enforces constraints on kinematic RBs (potential quirk), this prevents
+                    // them from blocking GONet's value blending system from applying synced positions.
+                    if (myRigidBody.constraints != RigidbodyConstraints.None)
+                    {
+                        //GONetLog.Warning($"[GONetParticipant] Clearing Rigidbody constraints on non-authority '{name}' (GONetId: {GONetId}) - was: {myRigidBody.constraints}");
+                        myRigidBody.constraints = RigidbodyConstraints.None;
+                    }
+
+                    // DIAGNOSTIC: Log AFTER changes
+                    //GONetLog.Warning($"[GONetParticipant][DIAGNOSTIC] AFTER kinematic change - '{name}' (GONetId: {GONetId}) isKinematic={myRigidBody.isKinematic}, useGravity={myRigidBody.useGravity}, constraints={myRigidBody.constraints}");
                     }
                 }
 
@@ -652,14 +974,122 @@ namespace GONet
                         myRigidBody2D.bodyType = RigidbodyType2D.Kinematic;
                         myRigidBody2D.isKinematic = true;
                         myRigidBody2D.simulated = false;
+
+                        // DISABLE Unity's Rigidbody2D interpolation on clients (GONet's value blending handles smoothing)
+                        // Using Unity's interpolation creates double interpolation conflict with GONet's value blending,
+                        // causing stuttering/jittery motion. GONet's value blending already provides smooth interpolation
+                        // between network updates (50Hz), so Unity's interpolation is redundant and conflicts.
+                        myRigidBody2D.interpolation = RigidbodyInterpolation2D.None;
                     }
                 }
+            }
+        }
+
+        /// <summary>
+        /// Temporarily enables physics to "snap" object to precise resting position when at-rest message received.
+        /// Eliminates quantization error (position: ~0.95mm, rotation: ~0.3°) by leveraging Unity's sub-millimeter
+        /// collision resolution and sub-0.01° rotation alignment.
+        /// PRE: <see cref="IsRigidBodyOwnerOnlyControlled"/> is true and <see cref="myRigidBody"/> is not null.
+        /// </summary>
+        private IEnumerator PhysicsSnapToRest_Coroutine(Vector3 quantizedPosition, Quaternion quantizedRotation)
+        {
+            if (!IsRigidBodyOwnerOnlyControlled || myRigidBody == null)
+            {
+                yield break;
+            }
+
+            // Step 1: Save original physics state
+            bool wasKinematic = myRigidBody.isKinematic;
+            bool wasUseGravity = myRigidBody.useGravity;
+
+            // Step 2: Temporarily enable physics (BOTH kinematic and gravity must be set correctly)
+            myRigidBody.isKinematic = false; // MUST be done BEFORE setting velocities!
+            myRigidBody.useGravity = true;   // Enable gravity so physics can resolve properly
+
+            // Step 3: Move to quantized position/rotation (within ~0.95mm and ~0.3° of true rest)
+            // and zero out velocities
+            myRigidBody.position = quantizedPosition;
+            myRigidBody.rotation = quantizedRotation;
+            myRigidBody.linearVelocity = Vector3.zero;
+            myRigidBody.angularVelocity = Vector3.zero;
+
+            // Step 4: Wait for physics resolution (collision detection + rotation alignment via friction/torque)
+            yield return new WaitForFixedUpdate();
+
+            // Step 5: Re-freeze object with physics-resolved position AND rotation
+            myRigidBody.linearVelocity = Vector3.zero;
+            myRigidBody.angularVelocity = Vector3.zero;
+            myRigidBody.useGravity = wasUseGravity;  // Restore original gravity setting
+            myRigidBody.isKinematic = wasKinematic;  // Restore kinematic state AFTER clearing velocities
+
+            // Result: Object now at sub-millimeter position and sub-0.01° rotation precision
+            // Physics resolver has corrected quantization error through collision detection and contact normal alignment
+        }
+
+        /// <summary>
+        /// Public entry point for physics snapping at rest. Called from GONet.cs at-rest handling.
+        /// Only applies to physics objects on non-authority clients.
+        /// Achieves 15-bit rotation quality at 9-bit bandwidth cost (0.3° quantized → sub-0.01° effective).
+        /// </summary>
+        internal void TriggerPhysicsSnapToRest(Vector3 quantizedPosition, Quaternion quantizedRotation)
+        {
+            // since this will happen in coroutine, need to check if recently destroyed (i.e., now null) 
+            if (this == null || gameObject == null) return;
+
+            // TOGGLE: Check if experimental physics snapping is enabled in ANY position/rotation sync profile (default: false as of Oct 2025)
+            // Stage 2 smart at-rest value selection is now the preferred approach
+            bool enabledInAnyProfile = false;
+
+            var syncCompanion = GONetMain.GetSyncCompanionByGNP(this);
+            if (syncCompanion != null && syncCompanion.valuesChangesSupport != null)
+            {
+                // Scan all synced values to find position/rotation with physics snapping enabled
+                for (byte i = 0; i < syncCompanion.valuesChangesSupport.Length; i++)
+                {
+                    var valueChangeSupport = syncCompanion.valuesChangesSupport[i];
+
+                    // Defensive null check (can be null during teardown/cleanup)
+                    if (valueChangeSupport == null)
+                    {
+                        continue;
+                    }
+
+                    // Check if this is position or rotation by function pointer comparison
+                    // (matches pattern from GONet.cs physics snapping trigger code)
+                    bool isPosition = valueChangeSupport.syncAttribute_ShouldSkipSync == GONetMain.IsPositionNotSyncd;
+                    bool isRotation = valueChangeSupport.syncAttribute_ShouldSkipSync == GONetMain.IsRotationNotSyncd;
+
+                    if ((isPosition || isRotation) && valueChangeSupport.syncAttribute_EnablePhysicsSnapping)
+                    {
+                        enabledInAnyProfile = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!enabledInAnyProfile)
+            {
+                return; // Feature disabled (not enabled in any position/rotation profile)
+            }
+
+            if (IsRigidBodyOwnerOnlyControlled && myRigidBody != null && !IsMine)
+            {
+                // Start the physics snapping coroutine
+                // Note: This will automatically stop any previous physics snap coroutine for this participant
+                StartCoroutine(PhysicsSnapToRest_Coroutine(quantizedPosition, quantizedRotation));
             }
         }
 
         private void OnDisable()
         {
             GONetMain.OnDisable_StopMonitoringForAutoMagicalNetworking(this);
+
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+            {
+                OnDisableEditor?.Invoke(this);
+            }
+#endif
         }
 
         /// <summary>

@@ -17,6 +17,7 @@ using MemoryPack;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using UnityEngine;
@@ -29,7 +30,7 @@ namespace GONet.Utils
         public const int MTU_x8 = MTU << 3;
         public const int MTU_x32 = MTU << 5;
 
-        static readonly ConcurrentDictionary<Thread, ArrayPool<byte>> byteArrayPoolByThreadMap = new ConcurrentDictionary<Thread, ArrayPool<byte>>();
+        static readonly ConcurrentDictionary<Thread, TieredArrayPool<byte>> byteArrayPoolByThreadMap = new ConcurrentDictionary<Thread, TieredArrayPool<byte>>();
 
         static SerializationUtils()
         {
@@ -59,10 +60,9 @@ namespace GONet.Utils
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static byte[] BorrowByteArray(int minimumSize)
         {
-            ArrayPool<byte> arrayPool;
-            if (!byteArrayPoolByThreadMap.TryGetValue(Thread.CurrentThread, out arrayPool))
+            if (!byteArrayPoolByThreadMap.TryGetValue(Thread.CurrentThread, out TieredArrayPool<byte> arrayPool))
             {
-                arrayPool = new ArrayPool<byte>(25, 1, MTU_x8, MTU_x32);
+                arrayPool = new TieredArrayPool<byte>();
                 byteArrayPoolByThreadMap[Thread.CurrentThread] = arrayPool;
             }
             return arrayPool.Borrow(minimumSize);
@@ -75,6 +75,27 @@ namespace GONet.Utils
         public static void ReturnByteArray(byte[] borrowed)
         {
             byteArrayPoolByThreadMap[Thread.CurrentThread].Return(borrowed);
+        }
+
+        /// <summary>
+        /// NOT required that <paramref name="borrowed"/> was returned from a call to <see cref="BorrowByteArray(int)"/> and not already passed in here.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool TryReturnByteArray(byte[] borrowed)
+        {
+            if (byteArrayPoolByThreadMap.TryGetValue(Thread.CurrentThread, out TieredArrayPool<byte> arrayPool))
+            {
+                try
+                {
+                    arrayPool.Return(borrowed);
+                    return true;
+                }
+                catch (InvalidOperationException) { }
+                catch (NotBorrowedFromPoolException) { }
+                catch (NullReferenceException) { }
+            }
+
+            return false;
         }
 
         /*
@@ -115,7 +136,7 @@ namespace GONet.Utils
         /// <summary>
         /// This is the best general purpose object (de)serializer GONet can provide.
         /// </summary>
-        public static T DeserializeFromBytes<T>(ArraySegment<byte> bytes)
+        public static T DeserializeFromBytes<T>(ReadOnlySpan<byte> bytes)
         {
             return MemoryPackSerializer.Deserialize<T>(bytes);
         }

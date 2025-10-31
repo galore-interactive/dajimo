@@ -13,6 +13,7 @@
  * -The ability to commercialize products built on modified source code, whereas this license must be included if source code provided in said products and whereas the products are interactive multi-player video games and cannot be viewed as a product competitive to GONet
  */
 
+using GONet.PluginAPI;
 using System;
 using System.Runtime.CompilerServices;
 using UnityEngine;
@@ -21,6 +22,28 @@ namespace GONet.Utils
 {
     public static class QuaternionUtils
     {
+        /// <summary>
+        /// Dot product threshold for detecting very small rotations (practical limit ~0.1 degrees due to float precision).
+        /// Used for quaternion equality comparisons and small-angle approximation decisions.
+        /// Value: 0.9999999f (7 nines) enables detection of 0.133° rotations (8°/s at 60 FPS).
+        /// </summary>
+        /// <remarks>
+        /// <para><b>History:</b></para>
+        /// <list type="bullet">
+        ///   <item>Original: 0.001° threshold using Quaternion.Angle() (slow but precise)</item>
+        ///   <item>May 2025 (v1.4.2): Changed to 0.9999f (4 nines) ≈ 1.62° using Quaternion.Dot() (fast but too coarse)</item>
+        ///   <item>October 2025: Changed to 0.9999999f (7 nines) to fix slow rotation detection for velocity sync</item>
+        /// </list>
+        /// <para><b>Why 7 nines?</b></para>
+        /// Rotation of 0.133° (8°/s at 60 FPS) produces dot product of 0.9999993, which requires
+        /// threshold of 0.9999999f (7 nines) to detect. Lower values fail to detect slow rotations.
+        /// <para><b>Float Precision Limit:</b></para>
+        /// Very small rotations (&lt; 0.1°) produce dot products that round to exactly 1.0 in float precision,
+        /// making them undetectable. The practical detection limit is ~0.1° (0.133° works, 0.027° doesn't).
+        /// This is acceptable for velocity-augmented sync which targets 8°/s (0.133°/frame at 60 FPS).
+        /// </remarks>
+        public const float DOT_PRODUCT_SMALL_ROTATION_THRESHOLD = 0.9999999f;
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         /// <summary>
         /// Gets the square of the quaternion length (magnitude).
@@ -375,6 +398,338 @@ namespace GONet.Utils
             quaternion.y *= scalar;
             quaternion.z *= scalar;
             return quaternion;
+        }
+    }
+
+    /// <summary>
+    /// Optimized quaternion interpolation and squad with log-exp, fast trig approximations,
+    /// branchless small-angle handling, and precomputed half-slerps.
+    /// </summary>
+    public static class QuaternionUtilsOptimized
+    {
+        /// <summary>
+        /// Fast polynomial approximations for acos, sin, cos
+        /// Returns an approximation of acos(x) for x in [-1,1]
+        /// Minimax polynomial: error ~0.005 radians
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static float ApproxAcos(float x)
+        {
+            return (-0.156583f * x * x - 0.33072f * x + 1.5708f);
+        }
+
+        /// <summary>
+        /// Taylor-series-based approximation: sin(x) ≈ x * (1 - x^2/6)
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static float ApproxSin(float x)
+        {
+            float x2 = x * x;
+            return x * (1f - x2 * (1f / 6f));
+        }
+
+        /// <summary>
+        /// Taylor-series-based approximation: cos(x) ≈ 1 - x^2/2 + x^4/24
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static float ApproxCos(float x)
+        {
+            float x2 = x * x;
+            return 1f - x2 * 0.5f + (x2 * x2) * (1f / 24f);
+        }
+
+        /// <summary>
+        /// Clamp x to [0,1] over [edge0,edge1], then smoothstep
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static float SmoothStep(float edge0, float edge1, float x)
+        {
+            float t = (x - edge0) / (edge1 - edge0);
+            // branchless clamp
+            t = t < 0f ? 0f : (t > 1f ? 1f : t);
+            return t * t * (3f - 2f * t);
+        }
+
+        /// <summary>
+        /// Quaternion logarithm and exponential
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Quaternion Log(Quaternion q)
+        {
+            if (q.w > 1f) q.w = 1f; // clamp for numeric safety
+            float angle = ApproxAcos(q.w);
+            float sinAngle = ApproxSin(angle);
+            Quaternion result = new Quaternion();
+            if (Mathf.Abs(sinAngle) > 1e-4f)
+            {
+                float coeff = angle / sinAngle;
+                result.x = q.x * coeff;
+                result.y = q.y * coeff;
+                result.z = q.z * coeff;
+            }
+            else
+            {
+                result.x = q.x;
+                result.y = q.y;
+                result.z = q.z;
+            }
+            result.w = 0f;
+            return result;
+        }
+
+        /// <summary>
+        /// Exact quaternion logarithm using Mathf.Acos/Sin instead of polynomial approximations.
+        /// USE THIS FOR: Velocity calculation (angular velocity from rotation delta)
+        /// USE Log() FOR: Value blending/interpolation (SlerpFast, SquadFast)
+        ///
+        /// Why separate methods?
+        /// - Velocity calculation: ~0.29° ApproxAcos error causes systematic bias in angular velocity
+        ///   → client rotates faster/slower than server → visible snap every VALUE anchor
+        /// - Value blending: ApproxAcos error is random (not systematic) and smoothed by interpolation
+        ///   → negligible visual impact, performance matters more
+        ///
+        /// Performance: ~5-10 CPU cycles slower than Log() due to Mathf.Acos (transcendental function)
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Quaternion Log_Exact(Quaternion q)
+        {
+            // Normalize to handle potential floating-point drift (ensures unit length assumption)
+            q = q.normalized;
+
+            // Clamp w to valid acos range [-1, 1] for numeric safety
+            float clampedW = Mathf.Clamp(q.w, -1f, 1f);
+
+            // Use exact Mathf.Acos (eliminates approximation errors)
+            float angle = Mathf.Acos(clampedW);
+
+            // Use exact Mathf.Sin
+            float sinAngle = Mathf.Sin(angle);
+
+            if (Mathf.Abs(sinAngle) > 1e-6f) // Slightly tighter threshold for better precision on very small angles
+            {
+                float coeff = angle / sinAngle;
+                return new Quaternion(q.x * coeff, q.y * coeff, q.z * coeff, 0f);
+            }
+            else
+            {
+                // For tiny angles, sin(angle) ≈ angle, so coeff ≈ 1; use components directly to avoid division instability
+                return new Quaternion(q.x, q.y, q.z, 0f);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Quaternion Exp(Quaternion q)
+        {
+            float angle = new Vector3(q.x, q.y, q.z).magnitude;
+            float sinAngle = ApproxSin(angle);
+            float cosAngle = ApproxCos(angle);
+            Quaternion result = new Quaternion();
+            if (angle > 1e-4f)
+            {
+                float coeff = sinAngle / angle;
+                result.x = q.x * coeff;
+                result.y = q.y * coeff;
+                result.z = q.z * coeff;
+            }
+            else
+            {
+                result.x = q.x;
+                result.y = q.y;
+                result.z = q.z;
+            }
+            result.w = cosAngle;
+            return result;
+        }
+
+        /// <summary>
+        /// Fast slerp using log-exp, branchless small-angle, and trig approximations
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Quaternion SlerpFast(Quaternion a, Quaternion b, float t)
+        {
+            // dot:
+            float cosHalfAngle = a.w * b.w + a.x * b.x + a.y * b.y + a.z * b.z;
+
+            // identity check:
+            if (Mathf.Abs(cosHalfAngle) >= QuaternionUtils.DOT_PRODUCT_SMALL_ROTATION_THRESHOLD)
+                return a;
+
+            // force shortest:
+            if (cosHalfAngle < 0f)
+            {
+                b = new Quaternion(-b.x, -b.y, -b.z, -b.w);
+                cosHalfAngle = -cosHalfAngle;
+            }
+
+            if (cosHalfAngle >= QuaternionUtils.DOT_PRODUCT_SMALL_ROTATION_THRESHOLD)
+                return a;
+
+            // exp/log path:
+            Quaternion delta = b * Quaternion.Inverse(a);
+            Quaternion logDelta = Log(delta);
+            Quaternion scaled = new Quaternion(logDelta.x * t, logDelta.y * t, logDelta.z * t, 0f);
+            Quaternion expDelta = Exp(scaled);
+            Quaternion full = a * expDelta;
+
+            // cheap LERP fallback (now our own):
+            Quaternion approx = LerpNormalized(a, b, t);
+
+            // mix based on how small the angle was:
+            float factor = SmoothStep(0.99f, 1.01f, cosHalfAngle);
+            return Quaternion.SlerpUnclamped(full, approx, factor);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static Quaternion LerpNormalized(Quaternion a, Quaternion b, float t)
+        {
+            // simple component‐wise LERP + normalize
+            Quaternion q = new Quaternion(
+                a.x * (1 - t) + b.x * t,
+                a.y * (1 - t) + b.y * t,
+                a.z * (1 - t) + b.z * t,
+                a.w * (1 - t) + b.w * t
+            );
+            return q.normalized;
+        }
+
+        /// <summary>
+        /// Precomputed half-slerps and final slerp -> fast Squad
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Quaternion SquadFast(Quaternion q0, Quaternion q1, Quaternion q2, Quaternion q3, float t)
+        {
+            // Precompute half-steps
+            float ta = 0.5f * (1f - t);
+            float tb = 0.5f * (1f + t);
+            Quaternion A = SlerpFast(q0, q3, ta);
+            Quaternion B = SlerpFast(q1, q2, tb);
+
+            // Final blend
+            float tc = 2f * t * (1f - t);
+            return SlerpFast(A, B, tc);
+        }
+
+        /// <summary>
+        /// Ultra-fast quaternion angle calculation using dot product
+        /// Avoids Acos for small angles where precision isn't critical
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float AngleFast(Quaternion a, Quaternion b)
+        {
+            float dot = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+
+            // Handle edge cases
+            if (dot > QuaternionUtils.DOT_PRODUCT_SMALL_ROTATION_THRESHOLD) return 0f;
+            if (dot < -QuaternionUtils.DOT_PRODUCT_SMALL_ROTATION_THRESHOLD) return 180f;
+
+            // For small angles, use approximation: angle ≈ 2 * asin(|a - b| / 2)
+            float absDot = dot < 0f ? -dot : dot;
+            if (absDot > 0.95f)
+            {
+                // Small angle approximation
+                float dx = a.x - b.x;
+                float dy = a.y - b.y;
+                float dz = a.z - b.z;
+                float dw = a.w - b.w;
+                float dist = MathF.Sqrt(dx * dx + dy * dy + dz * dz + dw * dw);
+                return dist * 114.59156f; // 2 * 180/PI
+            }
+
+            // Full calculation for larger angles
+            return MathF.Acos(absDot) * 114.59156f; // 2 * 180/PI
+        }
+
+        /// <summary>
+        /// Optimized RotateTowards using SLERP
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Quaternion RotateTowardsFast(Quaternion from, Quaternion to, float maxDegreesDelta)
+        {
+            float angle = AngleFast(from, to);
+            if (angle <= 0.01f) return to;
+
+            float t = maxDegreesDelta / angle;
+            t = t > 1f ? 1f : t;
+
+            return SlerpFast(from, to, t);
+        }
+
+        /// <summary>
+        /// Batch quaternion operations for better cache usage
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void BatchSlerp(
+            Quaternion[] results,
+            Quaternion[] from,
+            Quaternion[] to,
+            float[] t,
+            int count)
+        {
+            // Process in batches of 4 for potential SIMD optimization
+            int i = 0;
+            for (; i < count - 3; i += 4)
+            {
+                results[i] = SlerpFast(from[i], to[i], t[i]);
+                results[i + 1] = SlerpFast(from[i + 1], to[i + 1], t[i + 1]);
+                results[i + 2] = SlerpFast(from[i + 2], to[i + 2], t[i + 2]);
+                results[i + 3] = SlerpFast(from[i + 3], to[i + 3], t[i + 3]);
+            }
+
+            // Handle remaining
+            for (; i < count; i++)
+            {
+                results[i] = SlerpFast(from[i], to[i], t[i]);
+            }
+        }
+
+        // For the smoothing implementation, add this optimized version:
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static unsafe Quaternion GetSmoothedRotation_Optimized(
+            Quaternion mostRecentValue,
+            NumericValueChangeSnapshot[] olderValuesBuffer,
+            int bufferCount)
+        {
+            const int INPUT_COUNT = 3;
+            const int OUTPUT_COUNT = 2;
+
+            // Stack-allocated arrays for small, fixed sizes
+            Quaternion* inputs = stackalloc Quaternion[INPUT_COUNT];
+            Quaternion* outputs = stackalloc Quaternion[OUTPUT_COUNT];
+            float* inputWeights = stackalloc float[] { 0.35f, 0.1f, 0.1f };
+            float* outputWeights = stackalloc float[] { 0.4f, 0.05f };
+
+            // Fill inputs from buffer
+            fixed (NumericValueChangeSnapshot* bufferPtr = olderValuesBuffer)
+            {
+                int idx = 0;
+                for (int i = bufferCount - 1; i >= 0 && idx < INPUT_COUNT; --i, ++idx)
+                {
+                    inputs[idx] = *(Quaternion*)((byte*)&bufferPtr[i].numericValue + 1);
+                }
+
+                // Fill remaining with most recent if needed
+                for (; idx < INPUT_COUNT; ++idx)
+                {
+                    inputs[idx] = mostRecentValue;
+                }
+            }
+
+            // Compute weighted sum using basis-relative approach
+            Quaternion basis = mostRecentValue;
+            Quaternion invBasis = Quaternion.Inverse(basis);
+            Quaternion accumulator = Quaternion.identity;
+
+            // Process inputs
+            for (int i = 0; i < INPUT_COUNT; ++i)
+            {
+                Quaternion relative = invBasis * inputs[i];
+                accumulator = Quaternion.SlerpUnclamped(accumulator, relative, inputWeights[i]);
+            }
+
+            // Note: For a full implementation, you'd need to handle the output history
+            // This is simplified for demonstration
+
+            return basis * accumulator;
         }
     }
 }

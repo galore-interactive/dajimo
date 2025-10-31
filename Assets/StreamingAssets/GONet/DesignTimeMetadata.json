@@ -1,64 +1,89 @@
 {
     "Entries": [
         {
-            "location": "project://Assets/Code/GONetTesting/Resources/GONetTestObject.prefab",
+            "location": "resources://Assets/Code/GONetTesting/Resources/GONetTestObject.prefab",
             "unityGuid": "a9933bc6928a2194e9ebab69909bdee2",
             "codeGenerationId": 1
         },
         {
-            "location": "project://Assets/GONet/Resources/GONet/GONet_GlobalContext.prefab",
+            "location": "resources://Assets/GONet/Resources/GONet/GONet_GlobalContext.prefab",
             "unityGuid": "56c1b12035c5c034f81a7b4c212a379e",
             "codeGenerationId": 1
         },
         {
-            "location": "project://Assets/GONet/Resources/GONet/GONet_LocalContext.prefab",
+            "location": "resources://Assets/GONet/Resources/GONet/GONet_LocalContext.prefab",
             "unityGuid": "338c05f05b3eb634894468e022a5a11f",
             "codeGenerationId": 1
         },
         {
-            "location": "project://Assets/GONet/Sample/Projectile/Resources/AddGNP.prefab",
+            "location": "resources://Assets/GONet/Sample/Projectile/Resources/AddGNP.prefab",
             "unityGuid": "ed6740930fa5ebc4bb35d7a43b4bbcf9",
-            "codeGenerationId": 2
+            "codeGenerationId": 1
         },
         {
-            "location": "project://Assets/GONet/Sample/Projectile/Resources/CannonBall.prefab",
+            "location": "resources://Assets/GONet/Sample/Projectile/Resources/CannonBall.prefab",
+            "unityGuid": "cd34a05f71977084dad77778edeb26a3",
+            "codeGenerationId": 1
+        },
+        {
+            "location": "resources://Assets/GONet/Sample/Projectile/Resources/CannonBall_ZeroSync.prefab",
             "unityGuid": "296a736c5d07aac40bac772034430131",
             "codeGenerationId": 1
         },
         {
-            "location": "project://Assets/Prefabs/Drone/Resources/Drone.prefab",
+            "location": "resources://Assets/GONet/Sample/Projectile/Resources/SpawnTestBeacon.prefab",
+            "unityGuid": "ed363b3c8191b064fa74c62efdad0f4c",
+            "codeGenerationId": 1
+        },
+        {
+            "location": "resources://Assets/GONet/Sample/Resources/AutoRotatingOrbitor.prefab",
+            "unityGuid": "d06b4174f9cd9ea45a8e7a16669f297b",
+            "codeGenerationId": 3
+        },
+        {
+            "location": "resources://Assets/GONet/Sample/Resources/AutoRotatingOrbitor_ZeroSync.prefab",
+            "unityGuid": "4fcc3b4cd3b61664fb145e4efc1158a4",
+            "codeGenerationId": 3
+        },
+        {
+            "location": "resources://Assets/GONet/Sample/Resources/Follower.prefab",
+            "unityGuid": "ff0647f685f02be429db5526fe0c7067",
+            "codeGenerationId": 3
+        },
+        {
+            "location": "resources://Assets/Prefabs/Drone/Resources/Drone.prefab",
             "unityGuid": "ee1a413778ee19e42b1fcf805a1d54ad",
             "codeGenerationId": 1
         },
         {
-            "location": "project://Assets/Prefabs/Network/Resources/EntityStateSynchronizer.prefab",
+            "location": "resources://Assets/Prefabs/Network/Resources/EntityStateSynchronizer.prefab",
             "unityGuid": "ef7d35ee8ad37f6419f9f8ec087236f0",
             "codeGenerationId": 5
         },
         {
-            "location": "project://Assets/Prefabs/Network/Resources/GONet_LocalContext DATS Variant.prefab",
+            "location": "resources://Assets/Prefabs/Network/Resources/GONet_LocalContext DATS Variant.prefab",
             "unityGuid": "7b60e4ad4c307f94db833dba2b8cf1b3",
             "codeGenerationId": 4
         },
         {
-            "location": "project://Assets/Prefabs/Network/Resources/MannequinTarget.prefab",
+            "location": "resources://Assets/Prefabs/Network/Resources/MannequinTarget.prefab",
             "unityGuid": "ed9beef088a267b498e61bf9ca4e8f47",
             "codeGenerationId": 1
         },
         {
-            "location": "project://Assets/Prefabs/Network/Resources/TemporaryNeworkEntity.prefab",
+            "location": "resources://Assets/Prefabs/Network/Resources/TemporaryNeworkEntity.prefab",
             "unityGuid": "c2c9c7f27b96add44b9c3f45be4528ac",
             "codeGenerationId": 1
         },
         {
-            "location": "project://Assets/Prefabs/Obstacles/Resources/PlaceableObstacle.prefab",
+            "location": "resources://Assets/Prefabs/Obstacles/Resources/PlaceableObstacle.prefab",
             "unityGuid": "80d252da6bfb30c4dba269008797b300",
             "codeGenerationId": 1
         },
         {
-            "location": "project://Assets/Prefabs/Player/Resources/PlayerFPS.prefab",
+            "location": "resources://Assets/Prefabs/Player/Resources/PlayerFPS.prefab",
             "unityGuid": "9741025335354d5419f3cb7824ac38d5",
-            "codeGenerationId": 3
+            "codeGenerationId": 2
         },
         {
             "location": "scene://DATS_Main/GONet_GlobalContext",

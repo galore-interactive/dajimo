@@ -1,0 +1,448 @@
+using System;
+using System.Collections.Generic;
+using GONet.Utils;
+
+namespace GONet
+{
+    /// <summary>
+    /// Manages GONetId batch allocation for client-spawned, server-controlled objects.
+    /// This system ensures that clients can predictively assign GONetIds that match
+    /// what the server will assign, enabling seamless authority transfer.
+    ///
+    /// CRITICAL INVARIANTS:
+    /// 1. Each batch is configurable sequential IDs (default 200, range 100-1000)
+    /// 2. Batches are assigned to clients on connection
+    /// 3. Clients consume batches sequentially (6000, 6001, 6002...)
+    /// 4. Batches are exhausted and removed when all IDs used
+    /// 5. New batches requested automatically when 50% IDs remain (threshold = batchSize / 2)
+    /// 6. BOTH server and client batch state PERSISTS across scene changes (symmetric behavior)
+    ///
+    /// SCENE CHANGE BEHAVIOR (CRITICAL FIX - October 2025):
+    /// - Server keeps batch tracking across scenes (prevents overlapping batch allocations)
+    /// - Clients keep their batches across scenes (design intent - batches are global)
+    /// - MUST BE SYMMETRIC: If clients keep batches but server resets, late-joining clients
+    ///   can receive overlapping batches causing zombie objects (same GONetId reused)
+    ///
+    /// MEMORY/ID SPACE LIMITS:
+    /// - GONetId space: 4,194,304 IDs (22 bits for raw ID)
+    /// - Max batches: 20,971 (200 IDs/batch)
+    /// - Memory cost: ~8 bytes per batch (trivial even for 1000+ clients)
+    /// - Realistic usage: 100 clients × 1000 spawns = 100K IDs (2.5% of space)
+    /// - Batches released on client disconnect (natural recycling)
+    /// - Will NOT exhaust in any realistic game scenario
+    ///
+    /// BATCH SIZE CONFIGURATION:
+    /// - Configured in GONetGlobal.client_GONetIdBatchSize (runtime)
+    /// - Range: 100-1000 IDs per batch
+    /// - Default: 200 (good for typical games with projectiles)
+    /// - Larger batches = fewer limbo occurrences but more ID space used
+    /// - Smaller batches = more limbo occurrences but more efficient ID usage
+    /// </summary>
+    internal static class GONetIdBatchManager
+    {
+        // Batch size limits
+        public const int MIN_BATCH_SIZE = 100;
+        public const int MAX_BATCH_SIZE = 1000;
+        public const int DEFAULT_BATCH_SIZE = 200;
+
+        // Threshold is always 50% of batch size (hardcoded - user cannot configure)
+        private const float BATCH_REQUEST_THRESHOLD_PERCENT = 0.5f;
+
+        /// <summary>
+        /// Represents a single batch of GONetIds allocated for client use.
+        /// </summary>
+        private class GONetIdBatch
+        {
+            public readonly uint BatchStart;
+            public readonly uint BatchEnd; // Exclusive
+            public readonly int BatchSize;
+            public uint NextAvailableId;
+            public int RemainingCount;
+
+            public GONetIdBatch(uint batchStart, int batchSize)
+            {
+                BatchStart = batchStart;
+                BatchSize = batchSize;
+                BatchEnd = batchStart + (uint)batchSize;
+                NextAvailableId = batchStart;
+                RemainingCount = batchSize;
+            }
+
+            public bool TryAllocateNext(out uint gonetId)
+            {
+                if (RemainingCount > 0 && NextAvailableId < BatchEnd)
+                {
+                    gonetId = NextAvailableId++;
+                    RemainingCount--;
+                    return true;
+                }
+                gonetId = GONetParticipant.GONetIdRaw_Unset;
+                return false;
+            }
+
+            public bool Contains(uint gonetIdRaw)
+            {
+                return gonetIdRaw >= BatchStart && gonetIdRaw < BatchEnd;
+            }
+
+            public bool IsExhausted => RemainingCount == 0;
+        }
+
+        // SERVER STATE
+        private static readonly List<uint> server_allocatedBatchStarts = new List<uint>();
+
+        // CLIENT STATE
+        private static readonly List<GONetIdBatch> client_activeBatches = new List<GONetIdBatch>();
+        private static uint client_totalIdsAllocated = 0;
+        private static uint client_totalIdsUsed = 0;
+        private static bool client_hasRequestedBatch = false; // Track if we've already requested a batch for current low state
+
+        /// <summary>
+        /// Gets the configured batch size from GONetGlobal (runtime settings).
+        /// Falls back to DEFAULT_BATCH_SIZE if GONetGlobal unavailable.
+        /// </summary>
+        private static int GetBatchSize()
+        {
+            var gonetGlobal = GONetGlobal.Instance;
+            if (gonetGlobal != null)
+            {
+                return gonetGlobal.client_GONetIdBatchSize;
+            }
+
+            return DEFAULT_BATCH_SIZE;
+        }
+
+        /// <summary>
+        /// Gets the batch request threshold (50% of batch size).
+        /// </summary>
+        private static int GetBatchRequestThreshold()
+        {
+            int batchSize = GetBatchSize();
+            return (int)(batchSize * BATCH_REQUEST_THRESHOLD_PERCENT);
+        }
+
+        /// <summary>
+        /// CLIENT: Returns number of IDs remaining across all active batches.
+        /// </summary>
+        public static uint Client_GetRemainingIds()
+        {
+            return client_totalIdsAllocated - client_totalIdsUsed;
+        }
+
+        /// <summary>
+        /// CLIENT: Returns true if at least one ID is available for allocation.
+        /// </summary>
+        public static bool Client_HasAvailableIds()
+        {
+            return Client_GetRemainingIds() > 0;
+        }
+
+        #region SERVER API
+
+        /// <summary>
+        /// SERVER: Allocates a new batch for a connecting client.
+        /// Called during client connection handshake.
+        ///
+        /// CRITICAL FIX (October 2025): Now checks for RANGE OVERLAPS, not just exact start collisions.
+        /// Prevents overlapping batches like [4-203] and [104-303] which caused zombie objects.
+        /// </summary>
+        public static uint Server_AllocateNewBatch(uint lastAssignedGONetIdRaw)
+        {
+            int batchSize = GetBatchSize();
+            uint batchStart = lastAssignedGONetIdRaw + 1;
+
+            // CRITICAL FIX: Check for RANGE OVERLAP with all existing batches
+            // Old code only checked for exact start collisions (batchStart == existingBatch.start)
+            // New code checks if ANY part of the new batch overlaps with existing batches
+            bool hasOverlap;
+            int overlapCheckCount = 0;
+            const int MAX_OVERLAP_CHECKS = 1000; // Prevent infinite loop (should never need this many)
+
+            do
+            {
+                hasOverlap = false;
+                uint batchEnd = batchStart + (uint)batchSize; // Exclusive end
+
+                foreach (uint existingBatchStart in server_allocatedBatchStarts)
+                {
+                    uint existingBatchEnd = existingBatchStart + (uint)batchSize;
+
+                    // Check if ranges overlap: [batchStart, batchEnd) overlaps with [existingStart, existingEnd)
+                    // Two ranges overlap if: !(range1End <= range2Start || range2End <= range1Start)
+                    bool rangesOverlap = !(batchEnd <= existingBatchStart || existingBatchEnd <= batchStart);
+
+                    if (rangesOverlap)
+                    {
+                        // OVERLAP DETECTED: Move new batch start to after the existing batch
+                        uint newBatchStart = existingBatchEnd; // Start after the overlapping batch
+
+                        GONetLog.Warning($"[GONetIdBatch] Batch range overlap detected! " +
+                                       $"Attempted: [{batchStart}-{batchEnd - 1}] overlaps with existing: [{existingBatchStart}-{existingBatchEnd - 1}]. " +
+                                       $"Moving new batch to start at {newBatchStart}");
+
+                        batchStart = newBatchStart;
+                        hasOverlap = true;
+                        break; // Re-check all batches with new start position
+                    }
+                }
+
+                overlapCheckCount++;
+                if (overlapCheckCount >= MAX_OVERLAP_CHECKS)
+                {
+                    GONetLog.Error($"[GONetIdBatch] CRITICAL: Exceeded {MAX_OVERLAP_CHECKS} overlap checks! " +
+                                  $"This should never happen. Current batchStart: {batchStart}, Active batches: {server_allocatedBatchStarts.Count}");
+                    break;
+                }
+
+            } while (hasOverlap);
+
+            server_allocatedBatchStarts.Add(batchStart);
+            GONetLog.Info($"[GONetIdBatch] SERVER allocated batch [{batchStart} - {batchStart + batchSize - 1}] (size: {batchSize}) to client | Total active batches: {server_allocatedBatchStarts.Count}");
+
+            return batchStart;
+        }
+
+        /// <summary>
+        /// SERVER: Checks if a GONetId is within any allocated batch.
+        /// Used to skip these IDs when assigning server-owned objects.
+        /// </summary>
+        public static bool Server_IsIdInAnyBatch(uint gonetIdRaw)
+        {
+            int batchSize = GetBatchSize();
+            foreach (uint batchStart in server_allocatedBatchStarts)
+            {
+                if (gonetIdRaw >= batchStart && gonetIdRaw < batchStart + batchSize)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// SERVER: Removes a batch from tracking (e.g., client disconnected or batch exhausted).
+        /// </summary>
+        public static void Server_ReleaseBatch(uint batchStart)
+        {
+            if (server_allocatedBatchStarts.Remove(batchStart))
+            {
+                GONetLog.Info($"[GONetIdBatch] SERVER released batch starting at {batchStart}");
+            }
+        }
+
+        /// <summary>
+        /// SERVER: Clears all batch allocations.
+        ///
+        /// IMPORTANT (October 2025): Do NOT call on scene change!
+        /// - Batches persist across scenes to prevent overlapping allocations
+        /// - Only call on full server shutdown/restart
+        /// - Calling on scene change causes late-joining clients to receive overlapping batches
+        ///
+        /// USE CASES:
+        /// - Server shutdown/restart
+        /// - Unit test cleanup (TearDown)
+        /// - Manual admin command to reset batch state
+        ///
+        /// NOT FOR:
+        /// - Scene changes (batches persist across scenes)
+        /// - Individual client disconnect (use Server_ReleaseBatch instead)
+        /// </summary>
+        public static void Server_ResetAllBatches()
+        {
+            int count = server_allocatedBatchStarts.Count;
+            server_allocatedBatchStarts.Clear();
+            GONetLog.Info($"[GONetIdBatch] SERVER reset - cleared {count} batch allocations");
+        }
+
+        #endregion
+
+        #region CLIENT API
+
+        /// <summary>
+        /// CLIENT: Adds a new batch received from server.
+        ///
+        /// DIAGNOSTIC: Now checks for overlaps with existing batches and logs warnings.
+        /// Overlapping batches indicate a server-side bug and will cause zombie objects.
+        /// </summary>
+        public static void Client_AddBatch(uint batchStart)
+        {
+            int batchSize = GetBatchSize();
+
+            // Validate no duplicates (exact start match)
+            foreach (var batch in client_activeBatches)
+            {
+                if (batch.BatchStart == batchStart)
+                {
+                    GONetLog.Warning($"[GONetIdBatch] CLIENT received duplicate batch {batchStart} - ignoring");
+                    return;
+                }
+            }
+
+            // DIAGNOSTIC: Check for overlaps with existing batches
+            uint newBatchEnd = batchStart + (uint)batchSize;
+            foreach (var existingBatch in client_activeBatches)
+            {
+                // Check if ranges overlap
+                bool rangesOverlap = !(newBatchEnd <= existingBatch.BatchStart || existingBatch.BatchEnd <= batchStart);
+
+                if (rangesOverlap)
+                {
+                    uint overlapStart = Math.Max(batchStart, existingBatch.BatchStart);
+                    uint overlapEnd = Math.Min(newBatchEnd, existingBatch.BatchEnd);
+                    int overlapCount = (int)(overlapEnd - overlapStart);
+
+                    GONetLog.Error($"[GONetIdBatch] ⚠️ CRITICAL BUG: CLIENT received OVERLAPPING batch! " +
+                                  $"New: [{batchStart}-{newBatchEnd - 1}] overlaps with existing: [{existingBatch.BatchStart}-{existingBatch.BatchEnd - 1}]. " +
+                                  $"Overlap range: [{overlapStart}-{overlapEnd - 1}] ({overlapCount} IDs). " +
+                                  $"This WILL cause zombie objects and wrong-object-despawned bugs! " +
+                                  $"Server batch allocation logic is broken - check Server_AllocateNewBatch().");
+                }
+            }
+
+            var newBatch = new GONetIdBatch(batchStart, batchSize);
+            client_activeBatches.Add(newBatch);
+            client_totalIdsAllocated += (uint)batchSize;
+            client_hasRequestedBatch = false; // Reset flag - we can request again if we get low
+
+            GONetLog.Info($"[GONetIdBatch] CLIENT received batch [{batchStart} - {batchStart + batchSize - 1}] (size: {batchSize}) | Total batches: {client_activeBatches.Count} | Remaining IDs: {client_totalIdsAllocated - client_totalIdsUsed}");
+        }
+
+        /// <summary>
+        /// CLIENT: Attempts to allocate the next GONetId from available batches.
+        /// Returns true if successful, false if no batches available.
+        /// </summary>
+        public static bool Client_TryAllocateNextId(out uint gonetIdRaw, out bool shouldRequestNewBatch)
+        {
+            shouldRequestNewBatch = false;
+
+            // Remove exhausted batches
+            for (int i = client_activeBatches.Count - 1; i >= 0; i--)
+            {
+                if (client_activeBatches[i].IsExhausted)
+                {
+                    uint exhaustedStart = client_activeBatches[i].BatchStart;
+                    client_activeBatches.RemoveAt(i);
+                    GONetLog.Info($"[GONetIdBatch] CLIENT removed exhausted batch starting at {exhaustedStart} | Remaining batches: {client_activeBatches.Count}");
+                }
+            }
+
+            // Try to allocate from first available batch
+            if (client_activeBatches.Count > 0)
+            {
+                if (client_activeBatches[0].TryAllocateNext(out gonetIdRaw))
+                {
+                    client_totalIdsUsed++;
+
+                    uint remainingIds = client_totalIdsAllocated - client_totalIdsUsed;
+                    int threshold = GetBatchRequestThreshold();
+                    //GONetLog.Info($"[GONetIdBatch] CLIENT allocated GONetId {gonetIdRaw} | Remaining in batch: {client_activeBatches[0].RemainingCount} | Total remaining: {remainingIds}");
+
+                    // Check if we should request more batches (only once when dropping below threshold)
+                    if (remainingIds < threshold && !client_hasRequestedBatch)
+                    {
+                        shouldRequestNewBatch = true;
+                        client_hasRequestedBatch = true; // Mark that we've requested
+                        GONetLog.Warning($"[GONetIdBatch] CLIENT low on IDs ({remainingIds} remaining, threshold: {threshold}) - should request new batch");
+                    }
+
+                    return true;
+                }
+            }
+
+            // No batches available
+            gonetIdRaw = GONetParticipant.GONetIdRaw_Unset;
+            GONetLog.Error($"[GONetIdBatch] CLIENT has NO available batch IDs! Total batches: {client_activeBatches.Count}");
+            return false;
+        }
+
+        /// <summary>
+        /// CLIENT: Validates if a GONetId is within any active batch.
+        /// Used for debugging and validation.
+        /// </summary>
+        public static bool Client_IsIdInActiveBatch(uint gonetIdRaw)
+        {
+            foreach (var batch in client_activeBatches)
+            {
+                if (batch.Contains(gonetIdRaw))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// CLIENT: Resets all batch state. Call on disconnect/reconnect scenarios.
+        /// NOTE: Do NOT call on scene changes - batches persist across scenes!
+        /// </summary>
+        public static void Client_ResetAllBatches()
+        {
+            int batchCount = client_activeBatches.Count;
+            uint remainingIds = client_totalIdsAllocated - client_totalIdsUsed;
+
+            client_activeBatches.Clear();
+            client_totalIdsAllocated = 0;
+            client_totalIdsUsed = 0;
+            client_hasRequestedBatch = false; // Reset request flag
+
+            GONetLog.Info($"[GONetIdBatch] CLIENT reset - cleared {batchCount} batches ({remainingIds} unused IDs)");
+        }
+
+        /// <summary>
+        /// CLIENT: Gets diagnostic information about current batch state.
+        /// </summary>
+        public static string Client_GetDiagnostics()
+        {
+            uint remainingIds = client_totalIdsAllocated - client_totalIdsUsed;
+            return $"Batches: {client_activeBatches.Count} | Allocated: {client_totalIdsAllocated} | Used: {client_totalIdsUsed} | Remaining: {remainingIds}";
+        }
+
+        #endregion
+
+        #region VALIDATION
+
+        /// <summary>
+        /// Validates batch integrity (for unit testing and debugging).
+        /// </summary>
+        public static bool ValidateBatchIntegrity(out string errorMessage)
+        {
+            // Check for overlapping batches
+            for (int i = 0; i < client_activeBatches.Count; i++)
+            {
+                for (int j = i + 1; j < client_activeBatches.Count; j++)
+                {
+                    var batch1 = client_activeBatches[i];
+                    var batch2 = client_activeBatches[j];
+
+                    if (!(batch1.BatchEnd <= batch2.BatchStart || batch2.BatchEnd <= batch1.BatchStart))
+                    {
+                        errorMessage = $"Overlapping batches detected: [{batch1.BatchStart}-{batch1.BatchEnd}) and [{batch2.BatchStart}-{batch2.BatchEnd})";
+                        return false;
+                    }
+                }
+            }
+
+            // Check for invalid batch state
+            foreach (var batch in client_activeBatches)
+            {
+                if (batch.NextAvailableId > batch.BatchEnd)
+                {
+                    errorMessage = $"Batch {batch.BatchStart} has invalid NextAvailableId: {batch.NextAvailableId} (max: {batch.BatchEnd})";
+                    return false;
+                }
+
+                uint expectedRemaining = batch.BatchEnd - batch.NextAvailableId;
+                if (batch.RemainingCount != expectedRemaining)
+                {
+                    errorMessage = $"Batch {batch.BatchStart} has incorrect RemainingCount: {batch.RemainingCount} (expected: {expectedRemaining})";
+                    return false;
+                }
+            }
+
+            errorMessage = null;
+            return true;
+        }
+
+        #endregion
+    }
+}

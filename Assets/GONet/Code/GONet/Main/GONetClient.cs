@@ -16,6 +16,7 @@
 using NetcodeIO.NET;
 using System;
 using System.Collections.Generic;
+using System.Net;
 using GONetChannelId = System.Byte;
 
 namespace GONet
@@ -66,7 +67,24 @@ namespace GONet
 
         internal readonly Queue<GONetMain.NetworkData> incomingNetworkData_mustProcessAfterClientInitialized = new Queue<GONetMain.NetworkData>(100);
 
+        /// <summary>
+        /// Queue for messages that failed to process due to missing GONetId assignments.
+        /// These will be retried after scene-defined object GONetIds are synchronized.
+        /// </summary>
+        internal readonly Queue<GONetMain.NetworkData> incomingNetworkData_waitingForGONetIds = new Queue<GONetMain.NetworkData>(100);
+
+        /// <summary>
+        /// Maximum size for the GONetId waiting queue to prevent unbounded growth.
+        /// </summary>
+        internal const int MAX_GONETID_QUEUE_SIZE = 1000;
+
         bool isInitializedWithServer;
+
+        /// <summary>
+        /// Indicates whether scene-defined object GONetIds have been assigned.
+        /// Messages requiring GONetIds will be queued until this is true.
+        /// </summary>
+        internal bool areSceneDefinedObjectIdsReady = false;
         public bool IsInitializedWithServer
         {
             get => IsConnectedToServer && isInitializedWithServer;
@@ -74,10 +92,16 @@ namespace GONet
             {
                 bool before = IsInitializedWithServer;
 
+                GONetLog.Info($"[INIT] GONetClient.IsInitializedWithServer setter called - value: {value}, before: {before}, IsConnectedToServer: {IsConnectedToServer}, ConnectionState: {ConnectionState}");
+
                 isInitializedWithServer = value;
+
+                bool after = IsInitializedWithServer;
+                GONetLog.Info($"[INIT] After setting isInitializedWithServer field - IsInitializedWithServer property: {after}, will fire event: {!before && after}");
 
                 if (!before && IsInitializedWithServer)
                 {
+                    GONetLog.Info($"[INIT] Firing InitializedWithServer event");
                     InitializedWithServer?.Invoke(this);
                 }
             }
@@ -111,11 +135,12 @@ namespace GONet
 
         private readonly Client client;
 
-        public GONetClient(Client client)
+        public GONetClient()
         {
-            this.client = client;
+            this.client = new();
 
-            connectionToServer = new GONetConnection_ClientToServer(client);
+            int maxQueueSize = GONetGlobal.Instance != null ? GONetGlobal.Instance.maxReliableMessageQueueSize : 2000;
+            connectionToServer = new GONetConnection_ClientToServer(client, maxQueueSize);
 
             client.OnStateChanged += OnStateChanged_BubbleEventUp;
             client.TickBeginning += Client_TickBeginning_PossibleSeparateThread;
@@ -124,6 +149,14 @@ namespace GONet
             // provides a way to process (i.e., invoke public event) on the main thread since
             // GONet event bus subscriptions are processed on the main thread.
             GONetMain.EventBus.Subscribe<ClientStateChangedEvent>(OnStateChanged_BubbleEventUp_MainThread);
+        }
+
+        public void AddP2pEndPoint(IPEndPoint p2pEndPoint)
+        {
+            client.AddP2pEndPoint(p2pEndPoint);
+
+            // TODO consolidate this!!
+            GONetGlobal.ServerP2pEndPoint = p2pEndPoint;
         }
 
         private void Client_TickBeginning_PossibleSeparateThread()

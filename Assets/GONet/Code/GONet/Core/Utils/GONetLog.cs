@@ -13,97 +13,501 @@
  * -The ability to commercialize products built on modified source code, whereas this license must be included if source code provided in said products and whereas the products are interactive multi-player video games and cannot be viewed as a product competitive to GONet
  */
 
+using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
-using UnityEngine;
-//using log4net; // COMMENTED OUT: log4net not available in Unity 6
-using System;
-using System.Threading;
-using System.Collections.Concurrent;
 using System.Text;
+using System.Threading;
+using UnityEngine;
 using GONet.Utils;
 
 namespace GONet
 {
     /// <summary>
-    /// A nice log4net based logging utility that can/should replace <see cref="UnityEngine.Debug"/> LogXxx methods usage.
+    /// A high-performance logging utility that can/should replace <see cref="UnityEngine.Debug"/> LogXxx methods usage.
     /// Advantages:
-    ///     1. log statements will all have a nice/complete date/time stamp (that includes millisecond and uses GONet's own <see cref="HighResolutionTimeUtils"/>).  This alone might change your life!
-    ///     2. log statements will go to the console as usual as well as a gonet.log file in /logs folder
-    ///     3. gonet.log file history will be maintained for up to 10 files
-    ///     4. you can reconfigure the settings of how the log functions using log4net config stuff (initially configured to be located in configs/log_config.xml)
-    ///     5. you can subscribe
-    ///     6. you can conditionally exclude calls to any/all logging level methods using #DEFINE (i.e., remove everything from a production release/build if you like)
+    ///     1. Log statements will all have a nice/complete date/time stamp (that includes millisecond and uses GONet's own <see cref="HighResolutionTimeUtils"/>)
+    ///     2. Log statements will go to the console as usual as well as a gonet.log file in /logs folder
+    ///     3. gonet.log file history will be maintained with automatic file rotation and cleanup
+    ///     4. Thread-safe operation for multi-threaded environments
+    ///     5. You can subscribe to logging events
+    ///     6. You can conditionally exclude calls to any/all logging level methods using #DEFINE (i.e., remove everything from a production release/build if you like)
+    ///     7. Memory-efficient with minimal allocations and background async file writing
     /// </summary>
     public static class GONetLog
     {
-        //these keys are used to figure out which Log. Method was used when logging
-        //because the observer of unity's logging reports unity log levels...not necessarily the 
-        //log levels we will print out to log4net
-        const string KeyInfo = "Log:Info";
-        const string KeyDebug = "Log:Debug";
-        const string KeyWarning = "Log:Warning";
-        const string KeyError = "Log:Error";
-        const string KeyFatal = "Log:Fatal";
-        const string KeyVerbose = "Log:Verbose"; //this isn't really implemented the way we want yet
+        #region Constants and Enums
 
-        const char NewLine = '\n';
-        const string SPACE = " ";
+        // These keys are used to figure out which Log method was used when logging
+        // because the observer of unity's logging reports unity log levels...not necessarily the 
+        // log levels we will print out
+        private const string KeyInfo = "Log:Info";
+        private const string KeyDebug = "Log:Debug";
+        private const string KeyWarning = "Log:Warning";
+        private const string KeyError = "Log:Error";
+        private const string KeyFatal = "Log:Fatal";
+        private const string KeyVerbose = "Log:Verbose";
 
-        private static string lastLog;
-        public static string LastLog { get { return lastLog; } }
-        public delegate void LogDel(string logStr);
-        public static event LogDel OnLog;
+        private const char NewLine = '\n';
+        private const string SPACE = " ";
 
-        //private static ILog _fileLogger; // COMMENTED OUT: log4net not available in Unity 6
+        /// <summary>
+        /// Log level for filtering messages.
+        /// Used by logging profiles to control which messages are output.
+        /// </summary>
+        public enum LogLevel
+        {
+            Verbose,
+            Debug,
+            Info,
+            Warning,
+            Error,
+            Fatal
+        }
 
-        private static readonly string configXml = @" <log4net>
- 
-   <appender name=""FileAppender"" type=""log4net.Appender.RollingFileAppender"">
-     <file value=""____LOG_FILE_PATH____"" />
-     <appendToFile value=""true"" />
-     <rollingStyle value=""Once"" />
-     <maxSizeRollBackups value=""10"" />
-     <maximumFileSize value=""10MB"" />
-     <staticLogFileName value=""true"" />
-     <layout type=""log4net.Layout.PatternLayout"">
-       <!-- <conversionPattern value=""%date %-5level in [%thread] %logger%newline%message%newline"" /> -->
-	   <conversionPattern value=""[%-5level] (Thread:%t) %date{yyyy-MM-dd HH:mm:ss.fff} %message%newline"" />
-     </layout>
-   </appender>
-   
-	<appender name=""ConsoleAppender"" type=""log4net.Appender.ConsoleAppender"">
-		<layout type=""log4net.Layout.PatternLayout"">
-			   <conversionPattern value=""[%-5level] (Thread:%t) %date{yyyy-MM-dd HH:mm:ss.fff} %message%newline"" />
-		 </layout>
-	</appender>
- 
-   <root>
-     <level value=""ALL"" />
-     <appender-ref ref=""FileAppender"" />
-     <appender-ref ref=""ConsoleAppender"" />
-   </root>
-   
- </log4net>
-";
+        #endregion
 
-        //const string logFilePlaceholder = "logs\\gonet.log";
-        const string logFilePlaceholder = "____LOG_FILE_PATH____";
+        #region Configuration
 
-        // COMMENTED OUT: log4net not available in Unity 6
-        /*
+        // Log configuration (can be exposed as public properties if you want to make them configurable)
+        private static readonly string LogDirectory;
+        private static readonly int MaxLogFileDays = 5;
+        private static readonly string LogFilePrefix = "gonet";
+        private static readonly string LogFileExtension = ".log";
+        private static readonly int MaxQueueSize = 10000;
+        private static readonly TimeSpan FlushInterval = TimeSpan.FromSeconds(1);
+        private static readonly System.Threading.ThreadPriority BackgroundThreadPriority = System.Threading.ThreadPriority.BelowNormal;
+
+        #endregion
+
+        #region Fields
+
+        private static string _currentLogFile;
+        private static string _lastLog;
+        private static readonly Thread _loggerThread;
+        private static readonly ConcurrentQueue<LogMessage> _logQueue = new ConcurrentQueue<LogMessage>();
+        private static readonly AutoResetEvent _queueEvent = new AutoResetEvent(false);
+        private static volatile bool _shutdownRequested = false;
+        private static int _isShuttingDown = 0; // For thread-safe shutdown detection
+        private static int _queuedItemsCount = 0;
+        private static DateTime _lastFlushTime = DateTime.Now;
+        private static readonly object _flushLock = new object();
+        private static readonly ConcurrentDictionary<Thread, StringBuilder> _appendStringBuilderByThreadMap = new ConcurrentDictionary<Thread, StringBuilder>();
+        private static bool _initialized;
+
+        // Adding FileStreamWriter for more efficient file writes
+        private static FileStream _fileStream;
+        private static StreamWriter _streamWriter;
+
+        // Platform detection
+        private static readonly bool IsWebGL =
+#if UNITY_WEBGL
+            true;
+#else
+            false;
+#endif
+
+        #endregion
+
+        #region Logging Profiles
+
+        /// <summary>
+        /// Configuration for a custom logging profile.
+        /// Allows separate log files with different settings (stack traces, log levels, etc.)
+        /// </summary>
+        public class LoggingProfile
+        {
+            /// <summary>
+            /// Name of the profile (used as part of filename if OutputToSeparateFile is true)
+            /// </summary>
+            public string ProfileName { get; set; }
+
+            /// <summary>
+            /// If true, logs to a separate file: gonet-{ProfileName}-YYYY-MM-DD.log
+            /// If false, logs to the main gonet.log file
+            /// </summary>
+            public bool OutputToSeparateFile { get; set; }
+
+            /// <summary>
+            /// If true, includes stack traces in log output (slower, more detail)
+            /// If false, excludes stack traces (faster, cleaner output)
+            /// Default: false (no stack traces)
+            /// </summary>
+            public bool IncludeStackTraces { get; set; }
+
+            /// <summary>
+            /// Minimum log level to output for this profile.
+            /// Messages below this level are ignored.
+            /// Default: LogLevel.Verbose (log everything)
+            /// </summary>
+            public LogLevel MinimumLogLevel { get; set; }
+
+            internal string FilePath { get; set; }
+            internal FileStream FileStream { get; set; }
+            internal StreamWriter StreamWriter { get; set; }
+            internal readonly object WriteLock = new object();
+
+            public LoggingProfile(string profileName, bool outputToSeparateFile = true, bool includeStackTraces = false, LogLevel minimumLogLevel = LogLevel.Verbose)
+            {
+                ProfileName = profileName;
+                OutputToSeparateFile = outputToSeparateFile;
+                IncludeStackTraces = includeStackTraces;
+                MinimumLogLevel = minimumLogLevel;
+            }
+        }
+
+        private static readonly ConcurrentDictionary<string, LoggingProfile> _loggingProfiles = new ConcurrentDictionary<string, LoggingProfile>();
+
+        /// <summary>
+        /// Registers a custom logging profile.
+        /// Example: RegisterLoggingProfile(new LoggingProfile("MessageFlow", outputToSeparateFile: true, includeStackTraces: false));
+        /// </summary>
+        public static void RegisterLoggingProfile(LoggingProfile profile)
+        {
+            if (string.IsNullOrEmpty(profile.ProfileName))
+            {
+                UnityEngine.Debug.LogError("GONetLog: Cannot register profile with null/empty name");
+                return;
+            }
+
+            if (_loggingProfiles.TryAdd(profile.ProfileName, profile))
+            {
+                if (profile.OutputToSeparateFile)
+                {
+                    InitializeProfileFileStream(profile);
+                }
+                UnityEngine.Debug.Log($"GONetLog: Registered logging profile '{profile.ProfileName}' (SeparateFile={profile.OutputToSeparateFile}, StackTraces={profile.IncludeStackTraces}, MinLevel={profile.MinimumLogLevel})");
+            }
+            else
+            {
+                UnityEngine.Debug.LogWarning($"GONetLog: Profile '{profile.ProfileName}' already registered");
+            }
+        }
+
+        /// <summary>
+        /// Unregisters a logging profile and closes its file stream.
+        /// </summary>
+        public static void UnregisterLoggingProfile(string profileName)
+        {
+            if (_loggingProfiles.TryRemove(profileName, out LoggingProfile profile))
+            {
+                CloseProfileFileStream(profile);
+                UnityEngine.Debug.Log($"GONetLog: Unregistered logging profile '{profileName}'");
+            }
+        }
+
+        private static void InitializeProfileFileStream(LoggingProfile profile)
+        {
+            try
+            {
+                // Create filename: gonet-{ProfileName}-YYYY-MM-DD.log
+                string filename = $"{LogFilePrefix}-{profile.ProfileName}-{DateTime.Now:yyyy-MM-dd}{LogFileExtension}";
+                profile.FilePath = Path.Combine(LogDirectory, filename);
+
+                // Open with FileShare.ReadWrite to allow other processes to read
+                profile.FileStream = new FileStream(profile.FilePath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+                profile.StreamWriter = new StreamWriter(profile.FileStream, Encoding.UTF8)
+                {
+                    AutoFlush = false
+                };
+
+                UnityEngine.Debug.Log($"GONetLog: Initialized file stream for profile '{profile.ProfileName}': {profile.FilePath}");
+            }
+            catch (Exception ex)
+            {
+                UnityEngine.Debug.LogError($"GONetLog: Failed to initialize file stream for profile '{profile.ProfileName}': {ex.Message}");
+            }
+        }
+
+        private static void CloseProfileFileStream(LoggingProfile profile)
+        {
+            if (profile.StreamWriter != null)
+            {
+                try
+                {
+                    lock (profile.WriteLock)
+                    {
+                        profile.StreamWriter.Flush();
+                        profile.StreamWriter.Close();
+                        profile.StreamWriter = null;
+                    }
+                }
+                catch (Exception) { /* Ignore exceptions during cleanup */ }
+            }
+
+            if (profile.FileStream != null)
+            {
+                try
+                {
+                    profile.FileStream.Close();
+                    profile.FileStream = null;
+                }
+                catch (Exception) { /* Ignore exceptions during cleanup */ }
+            }
+        }
+
+        #endregion
+
+        #region Events and Properties
+
+        public static string LastLog => _lastLog;
+
+        public delegate void LogDelegate(string logStr);
+        public static event LogDelegate OnLog;
+
+        #endregion
+
+        #region Constructor/Initialization
+
         static GONetLog()
         {
-            _fileLogger = LogManager.GetLogger(typeof(GONetLog));
-            string configXml_updated = configXml.Replace(logFilePlaceholder, Path.Combine(Application.persistentDataPath, "logs", "gonet.log"));
-            using Stream configXmlStream = StringUtils.GenerateStreamFromString(configXml);
-            log4net.Config.XmlConfigurator.Configure(configXmlStream);
+            if (_initialized) return; // domain reload safety
+
+            try
+            {
+                // Set up log directory
+                string basePath;
+
+                // Choose appropriate base path based on platform
+                if (Application.platform == RuntimePlatform.WebGLPlayer)
+                {
+                    // WebGL has limited file system access
+                    basePath = Application.temporaryCachePath;
+                }
+                else if (Application.platform == RuntimePlatform.IPhonePlayer)
+                {
+                    // iOS has strict sandbox rules
+                    basePath = Application.persistentDataPath;
+                }
+                else
+                {
+                    // Default for most platforms
+                    basePath = Application.persistentDataPath;
+                }
+
+                LogDirectory = Path.Combine(basePath, "logs");
+
+                try
+                {
+                    Directory.CreateDirectory(LogDirectory);
+                }
+                catch (Exception ex)
+                {
+                    UnityEngine.Debug.LogError($"GONetLog: Failed to create log directory: {ex.Message}");
+                    // Fall back to Application.temporaryCachePath if first attempt fails
+                    LogDirectory = Path.Combine(Application.temporaryCachePath, "logs");
+                    Directory.CreateDirectory(LogDirectory);
+                }
+
+                // Clean up old log files
+                CleanupOldLogFiles();
+
+                // Create today's log file path
+                _currentLogFile = GetLogFilePath(DateTime.Now);
+
+                // Initialize the file stream
+                InitializeFileStream();
+
+                // Start the background thread for log processing
+                // Skip for WebGL which doesn't support threading
+                if (!IsWebGL)
+                {
+                    try
+                    {
+                        _loggerThread = new Thread(ProcessLogQueue)
+                        {
+                            IsBackground = true,
+                            Name = "GONet Logger Thread"
+                        };
+
+                        // Set thread priority in a try/catch (some platforms may restrict this)
+                        try
+                        {
+                            _loggerThread.Priority = BackgroundThreadPriority;
+                        }
+                        catch (Exception)
+                        {
+                            // Ignore priority setting failures - not critical
+                        }
+
+                        _loggerThread.Start();
+                    }
+                    catch (Exception ex)
+                    {
+                        UnityEngine.Debug.LogError($"GONetLog: Failed to start logger thread: {ex.Message}");
+
+                        // For platforms that might have threading issues, continue without the thread
+                        // This will make logging synchronous but still functional
+                        UnityEngine.Debug.LogWarning("GONetLog: Continuing without background processing thread. Logging will be synchronous.");
+                    }
+                }
+                else
+                {
+                    // WebGL special case - logging will be synchronous
+                    UnityEngine.Debug.Log("GONetLog: Running on WebGL, using synchronous logging (no background thread)");
+                }
+
+                // Register for application quit to ensure logs are flushed
+                Application.quitting += OnApplicationQuitting;
+
+                _initialized = true; // Mark as initialized only if we get here successfully
+                Info("GONetLog initialized");
+            }
+            catch (Exception ex)
+            {
+                UnityEngine.Debug.LogError($"GONetLog: Initialization failed: {ex.Message}\n{ex.StackTrace}");
+                _initialized = false; // Ensure we're marked as not initialized if anything fails
+            }
         }
-        */
 
-        #region Append methods
+        private static void InitializeFileStream()
+        {
+            try
+            {
+                // Close existing stream if needed
+                CloseFileStream();
 
-        static readonly ConcurrentDictionary<Thread, StringBuilder> appendStringBuilderByThreadMap = new ConcurrentDictionary<Thread, StringBuilder>();
+                // Create directory if it doesn't exist (important for all platforms)
+                string directory = Path.GetDirectoryName(_currentLogFile);
+                if (!Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                // Open with FileShare.ReadWrite to allow other processes to read the log while we write
+                _fileStream = new FileStream(_currentLogFile, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+                _streamWriter = new StreamWriter(_fileStream, Encoding.UTF8)
+                {
+                    AutoFlush = false // We'll manage flushing for better performance
+                };
+            }
+            catch (Exception ex)
+            {
+                // Fall back to Unity logging if file access fails
+                UnityEngine.Debug.LogError($"GONetLog: Failed to initialize log file: {ex.Message}");
+                // Try to log more details about the exception for troubleshooting
+                if (ex.InnerException != null)
+                {
+                    UnityEngine.Debug.LogError($"GONetLog: Inner exception: {ex.InnerException.Message}");
+                }
+            }
+        }
+
+        private static void CloseFileStream()
+        {
+            if (_streamWriter != null)
+            {
+                try
+                {
+                    _streamWriter.Flush();
+                    _streamWriter.Close();
+                    _streamWriter = null;
+                }
+                catch (Exception) { /* Ignore exceptions during cleanup */ }
+            }
+
+            if (_fileStream != null)
+            {
+                try
+                {
+                    _fileStream.Close();
+                    _fileStream = null;
+                }
+                catch (Exception) { /* Ignore exceptions during cleanup */ }
+            }
+        }
+
+        private static void OnApplicationQuitting()
+        {
+            try
+            {
+                // Prevent multiple shutdown attempts
+                if (Interlocked.Exchange(ref _isShuttingDown, 1) != 0)
+                {
+                    return; // Already shutting down
+                }
+
+                UnityEngine.Debug.Log("GONetLog: Beginning shutdown sequence");
+
+                // Close all profile file streams
+                foreach (var kvp in _loggingProfiles)
+                {
+                    CloseProfileFileStream(kvp.Value);
+                }
+
+                // Signal the background thread to finish processing
+                _shutdownRequested = true;
+
+                try
+                {
+                    // Signal event might throw on some platforms during shutdown
+                    _queueEvent.Set();
+                }
+                catch (Exception ex)
+                {
+                    UnityEngine.Debug.LogWarning($"GONetLog: Error signaling queue event during shutdown: {ex.Message}");
+                }
+
+                // Give the thread a chance to complete - try a more gentle approach
+                if (_loggerThread != null && _loggerThread.IsAlive)
+                {
+                    try
+                    {
+                        // Wait without Join first - can be safer on some platforms
+                        for (int i = 0; i < 10; i++) // Try for up to 1 second
+                        {
+                            if (!_loggerThread.IsAlive)
+                            {
+                                break;
+                            }
+
+                            Thread.Sleep(100);
+                        }
+
+                        // If thread is still alive, try a formal Join
+                        if (_loggerThread.IsAlive)
+                        {
+                            bool joined = _loggerThread.Join(1000); // Wait up to 1 second more
+                            if (!joined)
+                            {
+                                UnityEngine.Debug.LogWarning("GONetLog: Logger thread did not complete in time during shutdown");
+
+                                // Don't abort the thread - that's what's causing the error
+                                // Just continue with shutdown and let OS cleanup the thread
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        UnityEngine.Debug.LogWarning($"GONetLog: Error joining logger thread during shutdown: {ex.Message}");
+                    }
+                }
+
+                // Process any remaining messages directly
+                try
+                {
+                    DequeueAndWriteMessages();
+                }
+                catch (Exception ex)
+                {
+                    UnityEngine.Debug.LogWarning($"GONetLog: Error processing remaining messages during shutdown: {ex.Message}");
+                }
+
+                // Ensure everything is written to disk
+                CloseFileStream();
+
+                UnityEngine.Debug.Log("GONetLog: Shutdown complete");
+            }
+            catch (Exception ex)
+            {
+                UnityEngine.Debug.LogError($"GONetLog: Error during shutdown: {ex.Message}");
+            }
+        }
+
+        #endregion
+
+        #region Append Methods
 
         public static void Append(string message)
         {
@@ -117,10 +521,9 @@ namespace GONet
 
         private static void Append(string message, bool doesIncludeEOL)
         {
-            StringBuilder stringBuilder;
-            if (!appendStringBuilderByThreadMap.TryGetValue(Thread.CurrentThread, out stringBuilder))
+            if (!_appendStringBuilderByThreadMap.TryGetValue(Thread.CurrentThread, out StringBuilder stringBuilder))
             {
-                appendStringBuilderByThreadMap[Thread.CurrentThread] = stringBuilder = new StringBuilder(5000);
+                _appendStringBuilderByThreadMap[Thread.CurrentThread] = stringBuilder = new StringBuilder(5000);
             }
 
             stringBuilder.Append(message);
@@ -132,65 +535,65 @@ namespace GONet
 
         public static bool Append_FlushVerbose(string message = null)
         {
-            return Append_Flush(KeyVerbose, message);
+            return Append_Flush(LogLevel.Verbose, message);
         }
 
         public static bool Append_FlushDebug(string message = null)
         {
-            return Append_Flush(KeyDebug, message);
+            return Append_Flush(LogLevel.Debug, message);
         }
 
         public static bool Append_FlushInfo(string message = null)
         {
-            return Append_Flush(KeyInfo, message);
+            return Append_Flush(LogLevel.Info, message);
         }
 
         public static bool Append_FlushWarning(string message = null)
         {
-            return Append_Flush(KeyWarning, message);
+            return Append_Flush(LogLevel.Warning, message);
         }
 
         public static bool Append_FlushError(string message = null)
         {
-            return Append_Flush(KeyError, message);
+            return Append_Flush(LogLevel.Error, message);
         }
 
         public static bool Append_FlushFatal(string message = null)
         {
-            return Append_Flush(KeyFatal, message);
+            return Append_Flush(LogLevel.Fatal, message);
         }
 
-        private static bool Append_Flush(string logLevelKey, string message)
+        private static bool Append_Flush(LogLevel logLevel, string message)
         {
             if (message != null)
             {
                 Append(message, false);
             }
 
-            StringBuilder stringBuilder;
-            if (appendStringBuilderByThreadMap.TryGetValue(Thread.CurrentThread, out stringBuilder))
+            if (_appendStringBuilderByThreadMap.TryGetValue(Thread.CurrentThread, out StringBuilder stringBuilder))
             {
                 if (stringBuilder.Length > 0)
                 {
-                    switch (logLevelKey)
+                    string text = stringBuilder.ToString();
+                    switch (logLevel)
                     {
-                        case KeyVerbose:
-                            Verbose(stringBuilder.ToString());
+                        case LogLevel.Verbose:
+                            Verbose(text);
                             break;
-                        case KeyDebug:
-                            Debug(stringBuilder.ToString());
+                        case LogLevel.Debug:
+                            Debug(text);
                             break;
-                        case KeyInfo:
-                            Info(stringBuilder.ToString());
+                        case LogLevel.Info:
+                            Info(text);
                             break;
-                        case KeyWarning:
-                            Warning(stringBuilder.ToString());
+                        case LogLevel.Warning:
+                            Warning(text);
                             break;
-                        case KeyError:
-                            Error(stringBuilder.ToString());
+                        case LogLevel.Error:
+                            Error(text);
                             break;
-                        case KeyFatal:
-                            Fatal(stringBuilder.ToString());
+                        case LogLevel.Fatal:
+                            Fatal(text);
                             break;
                     }
                     stringBuilder.Clear();
@@ -203,37 +606,98 @@ namespace GONet
 
         #endregion
 
+        #region Log Methods
+
         [Conditional("LOG_INFO")]
         public static void Info(string message)
         {
-            LogInternal(message, KeyInfo, LogType.Log);
+            LogInternal(message, KeyInfo, LogType.Log, LogLevel.Info);
         }
 
         [Conditional("LOG_DEBUG")]
         public static void Debug(string message)
         {
-            LogInternal(message, KeyDebug, LogType.Log);
+            LogInternal(message, KeyDebug, LogType.Log, LogLevel.Debug);
         }
 
         [Conditional("LOG_WARNING")]
         public static void Warning(string message)
         {
-            LogInternal(message, KeyWarning, LogType.Warning);
+            LogInternal(message, KeyWarning, LogType.Warning, LogLevel.Warning);
         }
 
         [Conditional("LOG_ERROR")]
         public static void Error(string message)
         {
-            LogInternal(message, KeyError, LogType.Error);
+            LogInternal(message, KeyError, LogType.Error, LogLevel.Error);
         }
 
         [Conditional("LOG_FATAL")]
         public static void Fatal(string message)
         {
-            LogInternal(message, KeyFatal, LogType.Error);
+            LogInternal(message, KeyFatal, LogType.Error, LogLevel.Fatal);
         }
 
-        private static void LogInternal(string message, string keyXxx, LogType logType)
+        [Conditional("LOG_VERBOSE")]
+        public static void Verbose(string message)
+        {
+            LogInternal(message, KeyVerbose, LogType.Log, LogLevel.Verbose);
+        }
+
+        #endregion
+
+        #region Profile-Based Log Methods
+
+        /// <summary>
+        /// Logs an info message using a specific logging profile.
+        /// If profile doesn't exist, falls back to default logging.
+        /// </summary>
+        public static void Info(string message, string profileName)
+        {
+            LogWithProfile(message, profileName, KeyInfo, LogType.Log, LogLevel.Info);
+        }
+
+        /// <summary>
+        /// Logs a debug message using a specific logging profile.
+        /// If profile doesn't exist, falls back to default logging.
+        /// </summary>
+        public static void Debug(string message, string profileName)
+        {
+            LogWithProfile(message, profileName, KeyDebug, LogType.Log, LogLevel.Debug);
+        }
+
+        /// <summary>
+        /// Logs a warning message using a specific logging profile.
+        /// If profile doesn't exist, falls back to default logging.
+        /// </summary>
+        public static void Warning(string message, string profileName)
+        {
+            LogWithProfile(message, profileName, KeyWarning, LogType.Warning, LogLevel.Warning);
+        }
+
+        /// <summary>
+        /// Logs an error message using a specific logging profile.
+        /// If profile doesn't exist, falls back to default logging.
+        /// </summary>
+        public static void Error(string message, string profileName)
+        {
+            LogWithProfile(message, profileName, KeyError, LogType.Error, LogLevel.Error);
+        }
+
+        /// <summary>
+        /// Logs a verbose message using a specific logging profile.
+        /// If profile doesn't exist, falls back to default logging.
+        /// </summary>
+        public static void Verbose(string message, string profileName)
+        {
+            LogWithProfile(message, profileName, KeyVerbose, LogType.Log, LogLevel.Verbose);
+        }
+
+        #endregion
+
+        #region Internal Implementation
+
+        private static void LogInternal(string message, string keyXxx, LogType logType, LogLevel logLevel)
         {
             if (GONetMain.IsUnityApplicationEditor)
             {
@@ -260,90 +724,545 @@ namespace GONet
                 StackTrace trace = new StackTrace(1, true);
                 const string FRAME_PRE = "(frame:";
                 const string FRAME_POST = "s) ";
-                ProcessMessageViaLogger(string.Concat(FRAME_PRE, GONetMain.Time.ElapsedSeconds, FRAME_POST, keyXxx, SPACE, message), trace.ToString(), logType);
+                string logString = string.Concat(FRAME_PRE, GONetMain.Time.FrameCount, '/', GONetMain.Time.ElapsedSeconds, FRAME_POST, keyXxx, SPACE, message);
+                ProcessMessageViaLogger(logString, trace.ToString(), logType, logLevel);
             }
         }
 
-        [Conditional("LOG_VERBOSE")]
-        public static void Verbose(string message)
+        /// <summary>
+        /// Logs a message using a specific logging profile.
+        /// Handles stack trace inclusion, log level filtering, and separate file output per profile settings.
+        /// </summary>
+        private static void LogWithProfile(string message, string profileName, string keyXxx, LogType logType, LogLevel logLevel)
         {
-            UnityEngine.Debug.Log(FormatMessage(KeyVerbose, message));
-        }
-
-        private static string FormatMessage(string level, string message)
-        {
-            const string FORMAT = "[{0}]{5}{6} (Thread:{1}) ({2:dd MMM yyyy H:mm:ss.fff}) (frame:{3}s) {4}";
-            const string CLIENT = "[Client]";
-            const string SERVER = "[Server]";
-            return string.Format(FORMAT, level, Thread.CurrentThread.ManagedThreadId, DateTime.Now, GONetMain.Time.ElapsedSeconds, message,
-                GONetMain.IsServer ? SERVER : string.Empty,
-                GONetMain.IsClient ? CLIENT : string.Empty
-                );
-        }
-
-        private static void ProcessMessageViaLogger(string logString, string stackTrace, LogType type)
-        {
-            // COMMENTED OUT: log4net not available in Unity 6
-            /*
-            if (string.IsNullOrEmpty(stackTrace))
+            // Try to get the profile
+            if (!_loggingProfiles.TryGetValue(profileName, out LoggingProfile profile))
             {
-                switch (type)
+                // Profile doesn't exist - fall back to default logging
+                LogInternal(message, keyXxx, logType, logLevel);
+                return;
+            }
+
+            // Check log level filtering
+            if (logLevel < profile.MinimumLogLevel)
+            {
+                return; // Message is below minimum level for this profile
+            }
+
+            // Build the log message
+            const string FRAME_PRE = "(frame:";
+            const string FRAME_POST = "s) ";
+            string roleIdentifier = GetRoleIdentifier();
+            string logString = string.Concat(
+                "[", keyXxx, "]", roleIdentifier,
+                " (Thread:", Thread.CurrentThread.ManagedThreadId, ") ",
+                FRAME_PRE, GONetMain.Time.FrameCount, '/', GONetMain.Time.ElapsedSeconds, FRAME_POST,
+                message);
+
+            // Optionally include stack trace
+            string fullMessage;
+            if (profile.IncludeStackTraces)
+            {
+                StackTrace trace = new StackTrace(2, true); // Skip 2 frames (this method + caller)
+                fullMessage = string.Concat(logString, NewLine, trace.ToString(), NewLine);
+            }
+            else
+            {
+                fullMessage = string.Concat(logString, NewLine);
+            }
+
+            // Write to appropriate destination
+            if (profile.OutputToSeparateFile && profile.StreamWriter != null)
+            {
+                // Write to profile's separate file
+                try
                 {
-                    case LogType.Log:
-                        _fileLogger.Debug(logString);
-                        break;
-
-                    case LogType.Warning:
-                        _fileLogger.Warn(logString);
-                        break;
-
-                    case LogType.Error:
-                        _fileLogger.Error(logString);
-                        break;
-
-                    case LogType.Exception:
-                        _fileLogger.Fatal(logString);
-                        break;
-
-                    default:
-                        _fileLogger.Info(logString);
-                        break;
+                    lock (profile.WriteLock)
+                    {
+                        profile.StreamWriter.Write(fullMessage);
+                        // Flush periodically for real-time viewing
+                        if (DateTime.Now.Subtract(_lastFlushTime).TotalSeconds > 1.0)
+                        {
+                            profile.StreamWriter.Flush();
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    UnityEngine.Debug.LogError($"GONetLog: Failed to write to profile '{profileName}': {ex.Message}");
                 }
             }
             else
             {
-                string callLine = stackTrace;
-                string logLine = logString;
-                string concattedMessage = string.Concat(logString, NewLine, callLine, NewLine);
-                if (logLine.Contains(KeyInfo))
+                // Write to main log file (use existing queue system)
+                ProcessMessageViaLogger(logString, profile.IncludeStackTraces ? new StackTrace(2, true).ToString() : null, logType, logLevel);
+            }
+        }
+
+        /// <summary>
+        /// Gets a role identifier string that includes server/client role and unique client ID.
+        /// Format: "[Server]" or "[Client:AuthorityId]"
+        /// </summary>
+        private static string GetRoleIdentifier()
+        {
+            if (GONetMain.IsServer)
+            {
+                return "[Server]";
+            }
+            else if (GONetMain.IsClient)
+            {
+                // Include unique client authority ID to differentiate multiple clients
+                return string.Format("[Client:{0}]", GONetMain.MyAuthorityId);
+            }
+            return string.Empty;
+        }
+
+        private static string FormatMessage(string level, string message)
+        {
+            string roleIdentifier = GetRoleIdentifier();
+
+            const string FORMAT = "[{0}]{5} (Thread:{1}) ({2:dd MMM yyyy H:mm:ss.fff}) (frame:{7}/{3}s) {4}";
+            return string.Format(FORMAT, level, Thread.CurrentThread.ManagedThreadId, DateTime.Now, GONetMain.Time?.ElapsedSeconds, message,
+                roleIdentifier,
+                string.Empty, // Removed separate client tag (now combined in roleIdentifier)
+                GONetMain.Time?.FrameCount);
+        }
+
+        private static void ProcessMessageViaLogger(string logString, string stackTrace, LogType type, LogLevel logLevel)
+        {
+            // Create the full log message with or without stack trace
+            string fullMessage;
+            if (string.IsNullOrEmpty(stackTrace))
+            {
+                fullMessage = logString;
+            }
+            else
+            {
+                fullMessage = string.Concat(logString, NewLine, stackTrace, NewLine);
+            }
+
+            // Update LastLog for subscribers
+            _lastLog = logString;
+
+            // Notify subscribers synchronously (on this thread)
+            OnLog?.Invoke(_lastLog);
+
+            // Create log message
+            var logMessage = new LogMessage
+            {
+                Timestamp = DateTime.Now,
+                Message = fullMessage,
+                Level = logLevel,
+                ThreadId = Thread.CurrentThread.ManagedThreadId
+            };
+
+            // For WebGL or if thread not running, process synchronously
+            if (IsWebGL || _loggerThread == null || !_loggerThread.IsAlive)
+            {
+                // Handle WebGL or thread-less case with direct synchronous logging
+                try
                 {
-                    _fileLogger.Info(concattedMessage);
+                    string expectedLogFile = GetLogFilePath(DateTime.Now);
+                    if (_currentLogFile != expectedLogFile)
+                    {
+                        // Today changed, rotate log file
+                        _currentLogFile = expectedLogFile;
+                        InitializeFileStream();
+                        CleanupOldLogFiles();
+                    }
+
+                    // Format and write the log directly
+                    string roleIdentifier = GetRoleIdentifier();
+                    string formattedMessage = string.Format("[{0}]{5} (Thread:{1}) {2:yyyy-MM-dd HH:mm:ss.fff} {3}{4}",
+                        logMessage.Level.ToString().ToUpper(),
+                        logMessage.ThreadId,
+                        logMessage.Timestamp,
+                        logMessage.Message,
+                        Environment.NewLine,
+                        roleIdentifier);
+
+                    WriteToFile(formattedMessage);
+                    ForceFlush(false);
                 }
-                else if (logLine.Contains(KeyDebug))
+                catch (Exception ex)
                 {
-                    _fileLogger.Debug(concattedMessage);
-                }
-                else if (logLine.Contains(KeyWarning))
-                {
-                    _fileLogger.Warn(concattedMessage);
-                }
-                else if (logLine.Contains(KeyError))
-                {
-                    _fileLogger.Error(concattedMessage);
-                }
-                else if (logLine.Contains(KeyFatal))
-                {
-                    _fileLogger.Fatal(concattedMessage);
-                }
-                else if (logLine.Contains(KeyVerbose))
-                {
-                    _fileLogger.Info(concattedMessage);
+                    // If direct writing fails, fall back to Unity console
+                    UnityEngine.Debug.LogError($"GONetLog: Failed to write log synchronously: {ex.Message}");
                 }
             }
-            */
-            lastLog = logString;
+            else
+            {
+                // Normal async case - queue message for background writing
+                if (Interlocked.Increment(ref _queuedItemsCount) < MaxQueueSize) // Check queue size
+                {
+                    _logQueue.Enqueue(logMessage);
 
-            OnLog?.Invoke(lastLog);
+                    try
+                    {
+                        // Signal the background thread that a message is available
+                        _queueEvent.Set();
+                    }
+                    catch (Exception ex)
+                    {
+                        UnityEngine.Debug.LogWarning($"GONetLog: Failed to signal background thread: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    // Queue full, write to Unity console as a fallback
+                    UnityEngine.Debug.LogWarning($"GONetLog: Log queue full, message dropped: {logString}");
+                    Interlocked.Decrement(ref _queuedItemsCount);
+                }
+            }
         }
+
+        private static void ProcessLogQueue()
+        {
+#if UNITY_WEBGL
+            // WebGL doesn't support threading - this method won't be called
+            // But we need to keep it for cross-platform compilation
+            return;
+#else
+            try
+            {
+                int errorCount = 0;
+                const int maxErrors = 5; // Limit consecutive errors before backing off
+
+                while (!_shutdownRequested)
+                {
+                    try
+                    {
+                        // Wait for a message or timeout (to check for rotation)
+                        _queueEvent.WaitOne(1000);
+
+                        // Check if we've been asked to shut down during the wait
+                        if (_shutdownRequested)
+                        {
+                            break;
+                        }
+
+                        // Check for log file rotation
+                        string expectedLogFile = GetLogFilePath(DateTime.Now);
+                        if (_currentLogFile != expectedLogFile)
+                        {
+                            // Today changed, rotate log file
+                            _currentLogFile = expectedLogFile;
+                            InitializeFileStream();
+                            CleanupOldLogFiles();
+                        }
+
+                        // Process all pending log messages
+                        if (DequeueAndWriteMessages())
+                        {
+                            // If dequeued any messages, force a flush
+                            ForceFlush(true);
+                        }
+                        else if ((DateTime.Now - _lastFlushTime) > FlushInterval)
+                        {
+                            // Periodic flush even if no new messages
+                            ForceFlush(false);
+                        }
+
+                        // Reset error count on successful loop
+                        errorCount = 0;
+                    }
+                    catch (ThreadAbortException)
+                    {
+                        // Thread is being aborted (application quitting or domain unloading)
+                        // Just break out of the loop, no need to log an error
+                        break;
+                    }
+                    catch (Exception loopEx)
+                    {
+                        // Skip logging if we're shutting down
+                        if (_shutdownRequested)
+                        {
+                            break;
+                        }
+
+                        // Count consecutive errors
+                        errorCount++;
+
+                        // Log to Unity console as fallback, but only if not a thread abort
+                        if (!(loopEx is ThreadAbortException))
+                        {
+                            UnityEngine.Debug.LogError($"GONetLog: Error in log processing loop: {loopEx.Message}");
+                        }
+
+                        // If too many consecutive errors, back off
+                        if (errorCount >= maxErrors)
+                        {
+                            UnityEngine.Debug.LogError($"GONetLog: Too many consecutive errors, backing off for 10 seconds");
+                            try
+                            {
+                                Thread.Sleep(10000); // Back off for 10 seconds
+                                InitializeFileStream(); // Try to reinitialize after the wait
+                            }
+                            catch
+                            {
+                                // Ignore sleep errors
+                            }
+                        }
+                    }
+                }
+
+                // Handle final cleanup when exiting the loop normally
+                try
+                {
+                    DequeueAndWriteMessages();
+                    ForceFlush(true);
+                    UnityEngine.Debug.Log("GONetLog: Logger thread shutting down normally");
+                }
+                catch (Exception)
+                {
+                    // Ignore errors during final cleanup
+                }
+            }
+            catch (ThreadAbortException)
+            {
+                // Main try/catch - special handler for thread abort
+                try
+                {
+                    // Try to do final processing but don't log errors
+                    DequeueAndWriteMessages();
+                    ForceFlush(true);
+                }
+                catch
+                {
+                    // Truly ignore everything during thread abort
+                }
+            }
+            catch (Exception ex)
+            {
+                // Only log if not a thread abort
+                if (!(ex is ThreadAbortException))
+                {
+                    // Log to Unity console as fallback
+                    UnityEngine.Debug.LogError($"GONetLog: Fatal error in log processing thread: {ex.Message}\n{ex.StackTrace}");
+                }
+            }
+#endif
+        }
+
+        private static bool DequeueAndWriteMessages()
+        {
+            bool dequeuedAny = false;
+            StringBuilder batchBuilder = new StringBuilder(8192);
+            LogMessage message;
+
+            // Process messages in batches for better performance
+            while (_logQueue.TryDequeue(out message))
+            {
+                dequeuedAny = true;
+                Interlocked.Decrement(ref _queuedItemsCount);
+
+                // Format the log entry
+                string roleIdentifier = GetRoleIdentifier();
+                batchBuilder.AppendFormat("[{0}]{5} (Thread:{1}) {2:yyyy-MM-dd HH:mm:ss.fff} {3}{4}",
+                    message.Level.ToString().ToUpper(),
+                    message.ThreadId,
+                    message.Timestamp,
+                    message.Message,
+                    Environment.NewLine,
+                    roleIdentifier);
+
+                // Write to file in batches to reduce I/O
+                if (batchBuilder.Length > 4096)
+                {
+                    WriteToFile(batchBuilder.ToString());
+                    batchBuilder.Clear();
+                }
+            }
+
+            // Write any remaining messages
+            if (batchBuilder.Length > 0)
+            {
+                WriteToFile(batchBuilder.ToString());
+            }
+
+            return dequeuedAny;
+        }
+
+        private static void ForceFlush(bool forceReopen)
+        {
+            lock (_flushLock)
+            {
+                try
+                {
+                    if (_streamWriter != null)
+                    {
+                        _streamWriter.Flush();
+                        _lastFlushTime = DateTime.Now;
+
+                        // Optionally reopen the file to ensure file handle is released
+                        if (forceReopen)
+                        {
+                            InitializeFileStream();
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    UnityEngine.Debug.LogError($"GONetLog: Error flushing log: {ex.Message}");
+                }
+            }
+        }
+
+        private static void WriteToFile(string message)
+        {
+            try
+            {
+                lock (_flushLock)
+                {
+                    if (_streamWriter != null)
+                    {
+                        _streamWriter.Write(message);
+                    }
+                    else if (!_shutdownRequested)
+                    {
+                        // If writer is null but we're not shutting down, try to reinitialize
+                        UnityEngine.Debug.LogWarning("GONetLog: StreamWriter was null, attempting to reinitialize...");
+                        InitializeFileStream();
+
+                        // Try writing again if reinitialization succeeded
+                        if (_streamWriter != null)
+                        {
+                            _streamWriter.Write(message);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                UnityEngine.Debug.LogError($"GONetLog: Error writing to log file: {ex.Message}");
+
+                // Handle IO errors by attempting to recreate the file
+                if (ex is IOException || ex is ObjectDisposedException)
+                {
+                    try
+                    {
+                        // Wait a moment in case of temporary file system issues
+                        Thread.Sleep(100);
+                        InitializeFileStream();
+                    }
+                    catch
+                    {
+                        // Ignore errors in recovery attempt
+                    }
+                }
+            }
+        }
+
+        private static string GetLogFilePath(DateTime date)
+        {
+            return Path.Combine(LogDirectory, $"{LogFilePrefix}-{date:yyyy-MM-dd}{LogFileExtension}");
+        }
+
+        private static void CleanupOldLogFiles()
+        {
+            try
+            {
+                // Verify directory exists before attempting to enumerate files
+                if (!Directory.Exists(LogDirectory))
+                {
+                    return;
+                }
+
+                DirectoryInfo dirInfo = new DirectoryInfo(LogDirectory);
+                FileInfo[] files;
+
+                try
+                {
+                    files = dirInfo.GetFiles($"{LogFilePrefix}-*{LogFileExtension}");
+                }
+                catch (Exception ex)
+                {
+                    UnityEngine.Debug.LogWarning($"GONetLog: Failed to get log files for cleanup: {ex.Message}");
+                    return;
+                }
+
+                DateTime cutoffDate = DateTime.Now.AddDays(-MaxLogFileDays);
+
+                foreach (FileInfo file in files)
+                {
+                    try
+                    {
+                        // Extract date from filename
+                        if (file.Name.Length >= LogFilePrefix.Length + 11) // Make sure filename is long enough
+                        {
+                            string dateText = file.Name.Substring(LogFilePrefix.Length + 1, 10); // Extract "yyyy-MM-dd"
+                            DateTime fileDate;
+
+                            if (DateTime.TryParseExact(dateText, "yyyy-MM-dd",
+                                System.Globalization.CultureInfo.InvariantCulture,
+                                System.Globalization.DateTimeStyles.None, out fileDate))
+                            {
+                                if (fileDate < cutoffDate)
+                                {
+                                    try
+                                    {
+                                        file.Delete();
+                                    }
+                                    catch (IOException)
+                                    {
+                                        // File might be locked by another process
+                                        UnityEngine.Debug.LogWarning($"GONetLog: Could not delete log file {file.Name} (file may be in use)");
+                                    }
+                                }
+                                continue; // Skip the fallback if we successfully parsed the date
+                            }
+                        }
+
+                        // If any parse errors, use last write time as fallback
+                        if (file.LastWriteTime < cutoffDate)
+                        {
+                            try
+                            {
+                                file.Delete();
+                            }
+                            catch (IOException)
+                            {
+                                // File might be locked by another process
+                                UnityEngine.Debug.LogWarning($"GONetLog: Could not delete log file {file.Name} (file may be in use)");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Catch exceptions per file to continue processing other files
+                        UnityEngine.Debug.LogWarning($"GONetLog: Error processing log file {file.Name} for cleanup: {ex.Message}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                UnityEngine.Debug.LogError($"GONetLog: Failed to cleanup old log files: {ex.Message}");
+            }
+        }
+
+        #endregion
+
+        #region Supporting Types
+
+#if UNITY_WEBGL
+    // Use class instead of struct for WebGL since it doesn't support multithreading
+    private class LogMessage
+    {
+        public DateTime Timestamp;
+        public string Message;
+        public LogLevel Level;
+        public int ThreadId;
+    }
+#else
+        private struct LogMessage
+        {
+            public DateTime Timestamp;
+            public string Message;
+            public LogLevel Level;
+            public int ThreadId;
+        }
+#endif
+
+        #endregion
     }
 }

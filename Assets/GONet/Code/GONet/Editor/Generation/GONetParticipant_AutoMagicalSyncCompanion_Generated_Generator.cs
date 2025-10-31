@@ -1,4 +1,4 @@
-﻿/* GONet (TM, serial number 88592370), Copyright (c) 2019-2023 Galore Interactive LLC - All Rights Reserved
+/* GONet (TM, serial number 88592370), Copyright (c) 2019-2023 Galore Interactive LLC - All Rights Reserved
  * Unauthorized copying of this file, via any medium is strictly prohibited
  * Proprietary and confidential, email: contactus@galoreinteractive.com
  * 
@@ -15,6 +15,8 @@
 
 using Assets.GONet.Code.GONet.Editor.Generation;
 using GONet.Editor;
+using GONet.Editor.Generation;
+using GONet.Generation;
 using GONet.PluginAPI;
 using GONet.Utils;
 using MemoryPack;
@@ -26,7 +28,9 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
@@ -34,7 +38,6 @@ using UnityEditor.Compilation;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-
 
 namespace GONet.Generation
 {
@@ -55,6 +58,10 @@ namespace GONet.Generation
             CompilationPipeline.compilationFinished += CompilationPipelineOnCompilationFinished;
 
             GONetLog.Debug($"~~~~~~~~~~~~GEEPs start  BUILD did this!");
+
+            // CRITICAL: Validate ALL [GONetAutoMagicalSync] fields/properties in project BEFORE code generation
+            GONetParticipant_AutoMagicalSyncCompanion_Generated_Generator.ValidateAllAutoMagicalSyncFieldsInProject();
+
             GONetParticipant_AutoMagicalSyncCompanion_Generated_Generator.UpdateAllUniqueSnaps();
             GONetParticipant_AutoMagicalSyncCompanion_Generated_Generator.GenerateFiles();
             FileUtils.CopyFile(
@@ -186,6 +193,124 @@ namespace GONet.Generation
             EditorApplication.quitting += OnEditorApplicationQuitting;
         }
 
+        /// <summary>
+        /// Scans ALL MonoBehaviour types in the project for [GONetAutoMagicalSync] attributes and validates them.
+        /// This runs BEFORE code generation to catch unsupported types even if they're not on discovered prefabs.
+        /// </summary>
+        /// <exception cref="NotSupportedException">Thrown when any unsupported type is found</exception>
+        internal static void ValidateAllAutoMagicalSyncFieldsInProject()
+        {
+            const string GONET_AUTO_MAGICAL_SYNC_ATTRIBUTE_NAME = "GONetAutoMagicalSyncAttribute";
+
+            GONetLog.Debug("Validating all [GONetAutoMagicalSync] fields/properties in project...");
+
+            // Get all types in all assemblies (including user scripts)
+            var allTypes = AppDomain.CurrentDomain.GetAssemblies()
+                .SelectMany(assembly =>
+                {
+                    try { return assembly.GetTypes(); }
+                    catch { return System.Linq.Enumerable.Empty<Type>(); } // Skip assemblies that can't be loaded
+                });
+
+            int validatedCount = 0;
+            foreach (Type type in allTypes)
+            {
+                // Only check MonoBehaviour-derived types (where [GONetAutoMagicalSync] is used)
+                if (!typeof(MonoBehaviour).IsAssignableFrom(type))
+                {
+                    continue;
+                }
+
+                // Get all public instance fields and properties
+                MemberInfo[] members = type.GetMembers(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(member => member.MemberType == MemberTypes.Field || member.MemberType == MemberTypes.Property)
+                    .ToArray();
+
+                foreach (MemberInfo member in members)
+                {
+                    // Check if this member has [GONetAutoMagicalSync] attribute
+                    object attribute = member.GetCustomAttribute(typeof(GONetAutoMagicalSyncAttribute), true);
+                    if (attribute == null)
+                    {
+                        continue;
+                    }
+
+                    // Extract member type
+                    Type memberType = member.MemberType == MemberTypes.Property
+                        ? ((PropertyInfo)member).PropertyType
+                        : ((FieldInfo)member).FieldType;
+
+                    // Validate the type
+                    ValidateAutoMagicalSyncMemberType(memberType, member.Name, type);
+                    validatedCount++;
+                }
+            }
+
+            GONetLog.Debug($"Validated {validatedCount} [GONetAutoMagicalSync] fields/properties - all supported types!");
+        }
+
+        /// <summary>
+        /// Validates that a member type marked with [GONetAutoMagicalSync] is supported by GONet.
+        /// Throws an exception with clear error message if unsupported, halting code generation.
+        /// </summary>
+        /// <param name="memberType">The Type of the field/property marked with [GONetAutoMagicalSync]</param>
+        /// <param name="memberName">Name of the field/property for error messages</param>
+        /// <param name="componentType">Type of the component owning the member for error messages</param>
+        /// <exception cref="NotSupportedException">Thrown when type is not supported for sync</exception>
+        internal static void ValidateAutoMagicalSyncMemberType(Type memberType, string memberName, Type componentType)
+        {
+            const string DOUBLE_TYPE_FULL_NAME = "System.Double";
+            const string STRING_TYPE_FULL_NAME = "System.String";
+
+            // Check for explicitly unsupported types
+            if (memberType.FullName == DOUBLE_TYPE_FULL_NAME)
+            {
+                const string ERROR_MESSAGE_TEMPLATE =
+                    "[GONet Build Error] The field/property '{0}' in component '{1}' is marked with [GONetAutoMagicalSync], " +
+                    "but type 'double' is NOT supported for automatic value blending (interpolation/extrapolation).\n\n" +
+                    "Why: GONet's value blending system (NumericValueChangeSnapshot) only supports types that are commonly interpolated " +
+                    "in game synchronization: float, Vector2, Vector3, Vector4, and Quaternion. Double precision is typically used for " +
+                    "non-interpolated values like timestamps or IDs.\n\n" +
+                    "Solutions:\n" +
+                    "1. Change '{0}' to 'float' if you need value blending\n" +
+                    "2. Remove [GONetAutoMagicalSync] if this value doesn't need automatic sync\n" +
+                    "3. Use a custom serializer via CustomSerializerClass parameter if you need double precision without blending\n\n" +
+                    "Supported types: bool, byte, sbyte, short, ushort, int, uint, long, ulong, float, Vector2, Vector3, Vector4, Quaternion\n" +
+                    "Unsupported types: double, string (reference types not yet supported)";
+
+                string errorMessage = string.Format(ERROR_MESSAGE_TEMPLATE, memberName, componentType.FullName);
+
+                // Log to Unity console AND GONet log
+                Debug.LogError(errorMessage);
+                GONetLog.Error(errorMessage);
+
+                throw new NotSupportedException(errorMessage);
+            }
+
+            if (memberType.FullName == STRING_TYPE_FULL_NAME)
+            {
+                const string ERROR_MESSAGE_TEMPLATE =
+                    "[GONet Build Error] The field/property '{0}' in component '{1}' is marked with [GONetAutoMagicalSync], " +
+                    "but type 'string' is NOT supported for automatic sync.\n\n" +
+                    "Why: Reference types are not yet supported by GONet's AutoMagicalSync system.\n\n" +
+                    "Solutions:\n" +
+                    "1. Remove [GONetAutoMagicalSync] from '{0}'\n" +
+                    "2. Use RPCs ([ServerRpc]/[ClientRpc]) to send string values instead\n" +
+                    "3. Convert to a supported value type if possible (e.g., int for IDs)\n\n" +
+                    "Supported types: bool, byte, sbyte, short, ushort, int, uint, long, ulong, float, Vector2, Vector3, Vector4, Quaternion";
+
+                string errorMessage = string.Format(ERROR_MESSAGE_TEMPLATE, memberName, componentType.FullName);
+
+                // Log to Unity console AND GONet log
+                Debug.LogError(errorMessage);
+                GONetLog.Error(errorMessage);
+
+                throw new NotSupportedException(errorMessage);
+            }
+
+            // Additional validation can be added here for other unsupported types
+        }
+
         internal static void DeleteGeneratedFiles()
         {
             /*This method is one of the key tasks (out of three) of the GONet's code generation pipeline. The goal of this code generation task is to delete all the generated scripts except of the
@@ -212,8 +337,6 @@ namespace GONet.Generation
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-
-            GONetLog.Debug($"--------------  ddddddddddddddddeeeeee  zun zwallace.... tODO if this is after all the stuff on load, then _DesignTime can wait for this before on hierarchy change....add condition in if check");
         }
 
         static readonly Dictionary<int, List<GONetParticipant>> OnPostprocessAllAssets_By_frameCountMap = new Dictionary<int, List<GONetParticipant>>();
@@ -232,7 +355,12 @@ namespace GONet.Generation
         {
             IEnumerable<DesignTimeMetadata> designTimeLocations_gonetParticipants =
                 GONetSpawnSupport_Runtime.LoadDesignTimeMetadataFromPersistence();
-            IEnumerable<string> gnpPrefabAssetPaths = designTimeLocations_gonetParticipants.Where(x => x.Location.StartsWith(GONetSpawnSupport_Runtime.PROJECT_HIERARCHY_PREFIX)).Select(x => x.Location.Substring(GONetSpawnSupport_Runtime.PROJECT_HIERARCHY_PREFIX.Length));
+            // Get paths from design-time metadata for both project:// and resources:// prefixes (for backwards compatibility)
+            IEnumerable<string> gnpPrefabAssetPaths = designTimeLocations_gonetParticipants
+                .Where(x => x.Location.StartsWith(GONetSpawnSupport_Runtime.PROJECT_HIERARCHY_PREFIX) || x.Location.StartsWith(GONetSpawnSupport_Runtime.RESOURCES_HIERARCHY_PREFIX))
+                .Select(x => x.Location.StartsWith(GONetSpawnSupport_Runtime.PROJECT_HIERARCHY_PREFIX)
+                    ? x.Location.Substring(GONetSpawnSupport_Runtime.PROJECT_HIERARCHY_PREFIX.Length)
+                    : x.Location.Substring(GONetSpawnSupport_Runtime.RESOURCES_HIERARCHY_PREFIX.Length));
 
             if (importedAssets != null) foreach (string importedAsset in importedAssets)
             {
@@ -298,10 +426,13 @@ namespace GONet.Generation
             IEnumerable<DesignTimeMetadata> designTimeLocations_gonetParticipants_lastBuild =
                 GONetSpawnSupport_Runtime.LoadDesignTimeMetadataFromPersistence();
 
+            // Get paths from last build for both project:// and resources:// prefixes (for backwards compatibility)
             HashSet<string> gnpPrefabAssetPaths_lastBuild =
                 designTimeLocations_gonetParticipants_lastBuild
-                    .Where(x => x.Location.StartsWith(GONetSpawnSupport_Runtime.PROJECT_HIERARCHY_PREFIX))
-                    .Select(x => x.Location.Substring(GONetSpawnSupport_Runtime.PROJECT_HIERARCHY_PREFIX.Length))
+                    .Where(x => x.Location.StartsWith(GONetSpawnSupport_Runtime.PROJECT_HIERARCHY_PREFIX) || x.Location.StartsWith(GONetSpawnSupport_Runtime.RESOURCES_HIERARCHY_PREFIX))
+                    .Select(x => x.Location.StartsWith(GONetSpawnSupport_Runtime.PROJECT_HIERARCHY_PREFIX)
+                        ? x.Location.Substring(GONetSpawnSupport_Runtime.PROJECT_HIERARCHY_PREFIX.Length)
+                        : x.Location.Substring(GONetSpawnSupport_Runtime.RESOURCES_HIERARCHY_PREFIX.Length))
                     .ToHashSet();
 
             // Determine if the modified prefab path was in the last build's data
@@ -310,11 +441,11 @@ namespace GONet.Generation
 
             if (!wasInLastBuild && hasGONetParticipant)
             {
-                GONetSpawnSupport_DesignTime.AddGONetDesignTimeDirtyReason($"killo GONetParticipant added to prefab: {importedAssetPath}");
+                GONetSpawnSupport_DesignTime.AddGONetDesignTimeDirtyReason($"GONetParticipant added to prefab: {importedAssetPath}");
             }
             else if (wasInLastBuild && !hasGONetParticipant)
             {
-                GONetSpawnSupport_DesignTime.AddGONetDesignTimeDirtyReason($"killo GONetParticipant removed from prefab: {importedAssetPath}");
+                GONetSpawnSupport_DesignTime.AddGONetDesignTimeDirtyReason($"GONetParticipant removed from prefab: {importedAssetPath}");
             }
         }
 
@@ -404,7 +535,12 @@ namespace GONet.Generation
             }
 
             { // after that, we need to see about do things to ensure ALL prefabs get generated when stuff (e.g., C# files) change that possibly have some changes to sync stuffs
-                IEnumerable<string> gnpPrefabAssetPaths = designTimeLocations_gonetParticipants.Where(x => x.Location.StartsWith(GONetSpawnSupport_Runtime.PROJECT_HIERARCHY_PREFIX)).Select(x => x.Location.Substring(GONetSpawnSupport_Runtime.PROJECT_HIERARCHY_PREFIX.Length));
+                // Get paths from design-time metadata for both project:// and resources:// prefixes (for backwards compatibility)
+            IEnumerable<string> gnpPrefabAssetPaths = designTimeLocations_gonetParticipants
+                .Where(x => x.Location.StartsWith(GONetSpawnSupport_Runtime.PROJECT_HIERARCHY_PREFIX) || x.Location.StartsWith(GONetSpawnSupport_Runtime.RESOURCES_HIERARCHY_PREFIX))
+                .Select(x => x.Location.StartsWith(GONetSpawnSupport_Runtime.PROJECT_HIERARCHY_PREFIX)
+                    ? x.Location.Substring(GONetSpawnSupport_Runtime.PROJECT_HIERARCHY_PREFIX.Length)
+                    : x.Location.Substring(GONetSpawnSupport_Runtime.RESOURCES_HIERARCHY_PREFIX.Length));
                 foreach (string gnpPrefabAssetPath in gnpPrefabAssetPaths)
                 {
                     existingGONetParticipantAssetPaths.Add(gnpPrefabAssetPath);
@@ -728,6 +864,8 @@ namespace GONet.Generation
                 }
             }
 
+            GenerateAllRpcCompanions();
+
             {//Generate the BobWad_Generated.cs file.
                 //This list contains all the structs that implement IGONetEvent or any child interface
                 List<Type> allUniqueStructTypes = GetAllConcreteIGONetEventTypes();
@@ -819,6 +957,9 @@ namespace GONet.Generation
                 { // the folling replaces this: UpdateAssetsSnaps();
                     gnpsInProjectResources = GatherGONetParticipantsInAllResourcesFolders();
 
+                    // Also scan for addressable GONetParticipant prefabs during build
+                    GONetSpawnSupport_DesignTime.EnsureDesignTimeLocationsCurrent_AddressablesOnly();
+
                     //Get the updated asset folder snaps and ensure guids set on prefabs
                     foreach (GONetParticipant gonetParticipantPrefab in gnpsInProjectResources)
                     {
@@ -901,6 +1042,13 @@ namespace GONet.Generation
                 CreateAllPossibleUniqueSnapsAndGNPsFromLoopingBuildScenes(
                     out List<GONetParticipant_ComponentsWithAutoSyncMembers> createdInSceneUniqueSnaps,
                     out List<SnapGnpAssignment> createdInSceneUniqueAssignments);
+
+#if ADDRESSABLES_AVAILABLE
+                //Also get snaps from Addressables scenes
+                CreateAllPossibleUniqueSnapsAndGNPsFromAddressablesScenes(
+                    ref createdInSceneUniqueSnaps,
+                    ref createdInSceneUniqueAssignments);
+#endif
 
                 {//Apply changes (Additions, deletes and/or modifications) to both the unique snaps list and to the corresponding in scene game objects
                     HashSet<GONetParticipant_ComponentsWithAutoSyncMembers> sceneSnapsToDelete = new();
@@ -987,6 +1135,11 @@ namespace GONet.Generation
                                 inProjectGnp.UnityGuid);
                         GONetSpawnSupport_DesignTime.EnsureExistsInPersistence_WithTheseValues(dtm);
                     }
+
+#if ADDRESSABLES_AVAILABLE
+                    // Save and close Addressables scenes after CodeGenerationIds have been applied
+                    SaveAndCloseAddressablesScenes(initialActiveScene);
+#endif
                 }
 
                 {//Go back to the initial scene when this process started
@@ -1068,7 +1221,9 @@ namespace GONet.Generation
         /// <returns></returns>
         internal static List<GONetParticipant> GatherGONetParticipantsInAllResourcesFolders()
         {
-            // Find all 'Resources' folders under 'Assets'
+            List<GONetParticipant> gonetParticipantsInPrefabs = new List<GONetParticipant>();
+
+            // 1. Find all 'Resources' folders under 'Assets'
             string[] resourcesFolderGUIDs = AssetDatabase.FindAssets("Resources t:folder", new[] { "Assets" });
 
             List<string> resourcesFolders = new List<string>();
@@ -1083,8 +1238,6 @@ namespace GONet.Generation
                     resourcesFolders.Add(path);
                 }
             }
-
-            List<GONetParticipant> gonetParticipantsInPrefabs = new List<GONetParticipant>();
 
             foreach (string resourcesFolder in resourcesFolders)
             {
@@ -1104,11 +1257,74 @@ namespace GONet.Generation
                         if (gnps.Length > 0)
                         {
                             gonetParticipantsInPrefabs.AddRange(gnps);
-                            Debug.Log($"Found {gnps.Length} GONetParticipant(s) in prefab: {assetPath}");
+                            Debug.Log($"Found {gnps.Length} GONetParticipant(s) in Resources prefab: {assetPath}");
                         }
                     }
                 }
             }
+
+#if ADDRESSABLES_AVAILABLE
+            // 2. Find all addressable GONetParticipant prefabs
+            var addressableSettings = UnityEditor.AddressableAssets.AddressableAssetSettingsDefaultObject.Settings;
+            if (addressableSettings != null)
+            {
+                foreach (var group in addressableSettings.groups)
+                {
+                    if (group == null) continue;
+
+                    foreach (var entry in group.entries)
+                    {
+                        if (entry == null || string.IsNullOrEmpty(entry.address)) continue;
+
+                        // Load the asset to check if it contains a GONetParticipant
+                        string assetPath = AssetDatabase.GUIDToAssetPath(entry.guid);
+                        if (string.IsNullOrEmpty(assetPath)) continue;
+
+                        // Check if it's a prefab file
+                        if (assetPath.EndsWith(".prefab", System.StringComparison.OrdinalIgnoreCase))
+                        {
+                            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);
+                            if (prefab != null)
+                            {
+                                // Get all GONetParticipant components in the prefab's hierarchy
+                                GONetParticipant[] gnps = prefab.GetComponentsInChildren<GONetParticipant>(includeInactive: true);
+
+                                if (gnps.Length > 0)
+                                {
+                                    gonetParticipantsInPrefabs.AddRange(gnps);
+                                    string guid = AssetDatabase.AssetPathToGUID(assetPath);
+                                    Debug.Log($"Found {gnps.Length} GONetParticipant(s) in addressable prefab: {assetPath} (address: {entry.address}) (guid: {guid}) (entry.guid: {entry.guid})");
+                                }
+                            }
+                        }
+                        // Check if it's a folder - scan for prefabs inside
+                        else if (AssetDatabase.IsValidFolder(assetPath))
+                        {
+                            string[] prefabGuids = AssetDatabase.FindAssets("t:Prefab", new[] { assetPath });
+
+                            foreach (string prefabGuid in prefabGuids)
+                            {
+                                string prefabPath = AssetDatabase.GUIDToAssetPath(prefabGuid);
+                                GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+                                if (prefab != null)
+                                {
+                                    // Get all GONetParticipant components in the prefab's hierarchy
+                                    GONetParticipant[] gnps = prefab.GetComponentsInChildren<GONetParticipant>(includeInactive: true);
+
+                                    if (gnps.Length > 0)
+                                    {
+                                        string prefabFileName = System.IO.Path.GetFileName(prefabPath);
+                                        string addressableKey = string.Concat(entry.address, "/", prefabFileName);
+                                        gonetParticipantsInPrefabs.AddRange(gnps);
+                                        Debug.Log($"Found {gnps.Length} GONetParticipant(s) in addressable folder prefab: {prefabPath} (address: {addressableKey})");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+#endif
 
             return gonetParticipantsInPrefabs;
         }
@@ -1121,7 +1337,7 @@ namespace GONet.Generation
         }
 
         private static void CreateAllPossibleUniqueSnapsAndGNPsFromResources(
-            List<GONetParticipant> gnpsInProjectResources, 
+            List<GONetParticipant> gnpsInProjectResources,
             out List<SnapGnpAssignment> createdInProjectResourcesAssetsUniqueAssignments)
         {
             createdInProjectResourcesAssetsUniqueAssignments = new();
@@ -1132,7 +1348,61 @@ namespace GONet.Generation
                 bool isProjectAsset = !string.IsNullOrWhiteSpace(projectPath);
                 if (isProjectAsset)
                 {
-                    string currentLocation = string.Concat(GONetSpawnSupport_Runtime.PROJECT_HIERARCHY_PREFIX, projectPath);
+                    // Use resources:// prefix for assets in Resources folders, project:// for others
+                    string currentLocation;
+                    if (projectPath.Contains("/Resources/"))
+                    {
+                        currentLocation = string.Concat(GONetSpawnSupport_Runtime.RESOURCES_HIERARCHY_PREFIX, projectPath);
+                    }
+                    else
+                    {
+                        currentLocation = string.Concat(GONetSpawnSupport_Runtime.PROJECT_HIERARCHY_PREFIX, projectPath);
+                    }
+
+#if ADDRESSABLES_AVAILABLE
+                    // Check if this is an addressable asset and use the appropriate prefix
+                    var addressableSettings = UnityEditor.AddressableAssets.AddressableAssetSettingsDefaultObject.Settings;
+                    bool isAddressable = false;
+                    string addressableKey = null;
+
+                    if (addressableSettings != null)
+                    {
+                        string guid = AssetDatabase.AssetPathToGUID(projectPath);
+                        var entry = addressableSettings.FindAssetEntry(guid);
+                        if (entry != null && !string.IsNullOrEmpty(entry.address))
+                        {
+                            isAddressable = true;
+                            addressableKey = entry.address;
+                            currentLocation = string.Concat(GONetSpawnSupport_Runtime.ADDRESSABLES_HIERARCHY_PREFIX, entry.address);
+                        }
+                        else
+                        {
+                            // Check if this prefab is in an addressable folder
+                            foreach (var group in addressableSettings.groups)
+                            {
+                                if (group == null) continue;
+
+                                foreach (var groupEntry in group.entries)
+                                {
+                                    if (groupEntry == null || string.IsNullOrEmpty(groupEntry.address)) continue;
+
+                                    string entryPath = AssetDatabase.GUIDToAssetPath(groupEntry.guid);
+                                    if (AssetDatabase.IsValidFolder(entryPath) && projectPath.StartsWith(entryPath + "/"))
+                                    {
+                                        // This prefab is inside an addressable folder
+                                        string prefabFileName = System.IO.Path.GetFileName(projectPath);
+                                        addressableKey = string.Concat(groupEntry.address, "/", prefabFileName);
+                                        isAddressable = true;
+                                        currentLocation = string.Concat(GONetSpawnSupport_Runtime.ADDRESSABLES_HIERARCHY_PREFIX, addressableKey);
+                                        break;
+                                    }
+                                }
+                                if (isAddressable) break;
+                            }
+                        }
+                    }
+#endif
+
                     GONetParticipant_ComponentsWithAutoSyncMembers assignedSnap = new(gnp);
                     // TODO? possibleInSceneUniqueSnaps.Add(assignedSnap);
                     createdInProjectResourcesAssetsUniqueAssignments.Add(new()
@@ -1141,6 +1411,16 @@ namespace GONet.Generation
                         assignedSnap = assignedSnap,
                         gnp = gnp,
                     });
+
+#if ADDRESSABLES_AVAILABLE
+                    // Update the GONetParticipant's design time metadata if it's addressable
+                    if (isAddressable && addressableKey != null)
+                    {
+                        var designTimeMetadata = GONetSpawnSupport_Runtime.GetDesignTimeMetadata(gnp);
+                        designTimeMetadata.UnityGuid = AssetDatabase.AssetPathToGUID(projectPath);
+                        GONetLog.Debug($"CreateAllPossibleUniqueSnapsAndGNPsFromResources: Set addressable metadata for '{gnp.name}' with key: '{addressableKey}'");
+                    }
+#endif
                 }
                 else
                 {
@@ -1214,6 +1494,172 @@ namespace GONet.Generation
             // Ensure the initial scene is the active scene
             EditorSceneManager.SetActiveScene(initialActiveScene);
         }
+
+#if ADDRESSABLES_AVAILABLE
+        private static void CreateAllPossibleUniqueSnapsAndGNPsFromAddressablesScenes(
+            ref List<GONetParticipant_ComponentsWithAutoSyncMembers> possibleInSceneUniqueSnaps,
+            ref List<SnapGnpAssignment> allSceneSnapGnpAssignments)
+        {
+            try
+            {
+                var settings = UnityEditor.AddressableAssets.AddressableAssetSettingsDefaultObject.Settings;
+                if (settings == null)
+                {
+                    GONetLog.Debug("[GONet] No Addressables settings found - skipping Addressables scene scan");
+                    return;
+                }
+
+                // Collect all scene asset entries from Addressables
+                List<string> addressableScenesPath = new List<string>();
+                foreach (var group in settings.groups)
+                {
+                    if (group == null) continue;
+
+                    foreach (var entry in group.entries)
+                    {
+                        if (entry == null) continue;
+
+                        // Check if this is a scene asset
+                        string assetPath = AssetDatabase.GUIDToAssetPath(entry.guid);
+                        if (!string.IsNullOrEmpty(assetPath) && assetPath.EndsWith(".unity"))
+                        {
+                            addressableScenesPath.Add(assetPath);
+                        }
+                    }
+                }
+
+                if (addressableScenesPath.Count == 0)
+                {
+                    GONetLog.Debug("[GONet] No scenes found in Addressables");
+                    return;
+                }
+
+                GONetLog.Debug($"[GONet] Found {addressableScenesPath.Count} scene(s) in Addressables: {string.Join(", ", addressableScenesPath)}");
+
+                // Record the initially active scene
+                Scene initialActiveScene = EditorSceneManager.GetActiveScene();
+
+                // Load each Addressables scene additively, scan it, then unload it
+                foreach (string scenePath in addressableScenesPath)
+                {
+                    try
+                    {
+                        GONetLog.Debug($"[GONet] Loading Addressables scene for scanning: {scenePath}");
+
+                        Scene scene = EditorSceneManager.GetSceneByPath(scenePath);
+                        Scene openScene;
+
+                        if (scene.isLoaded)
+                        {
+                            // The scene is already open; use the existing scene
+                            openScene = scene;
+                        }
+                        else
+                        {
+                            // Open the scene additively without unloading other scenes
+                            openScene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Additive);
+                        }
+
+                        if (openScene.IsValid())
+                        {
+                            // Process GONetParticipants
+                            List<GONetParticipant> gnps = new List<GONetParticipant>();
+                            GetGNPsWithinScene(openScene, out gnps);
+
+                            foreach (GONetParticipant gnp in gnps)
+                            {
+                                // Process each GNP
+                                string gnpFullScenePath = DesignTimeMetadata.GetFullUniquePathInScene(gnp);
+                                GONetParticipant_ComponentsWithAutoSyncMembers assignedSnap = new(gnp);
+                                possibleInSceneUniqueSnaps.Add(assignedSnap);
+                                allSceneSnapGnpAssignments.Add(new()
+                                {
+                                    fullProjectOrScenePath = gnpFullScenePath,
+                                    assignedSnap = assignedSnap,
+                                    gnp = gnp,
+                                });
+                                GONetLog.Debug($"[GONet] Found GNP in Addressables scene '{openScene.name}': {gnp.gameObject.name}");
+                            }
+                        }
+                        else
+                        {
+                            GONetLog.Warning($"[GONet] Invalid Addressables scene: {scenePath}");
+                        }
+
+                        // DON'T close the scene yet - we need to keep it loaded so that
+                        // CodeGenerationIds can be applied to the GONetParticipants later
+                        // The scenes will need to be saved after IDs are applied
+                    }
+                    catch (System.Exception ex)
+                    {
+                        GONetLog.Warning($"[GONet] Failed to load/scan Addressables scene '{scenePath}': {ex.Message}");
+                    }
+                }
+
+                // Ensure the initial scene is the active scene
+                EditorSceneManager.SetActiveScene(initialActiveScene);
+
+                GONetLog.Debug($"[GONet] Finished scanning Addressables scenes");
+            }
+            catch (System.Exception ex)
+            {
+                GONetLog.Error($"[GONet] Error while scanning Addressables scenes: {ex.Message}");
+            }
+        }
+
+        private static void SaveAndCloseAddressablesScenes(Scene initialActiveScene)
+        {
+            try
+            {
+                var settings = UnityEditor.AddressableAssets.AddressableAssetSettingsDefaultObject.Settings;
+                if (settings == null)
+                {
+                    return;
+                }
+
+                // Find all Addressables scenes
+                HashSet<string> addressableScenePaths = new HashSet<string>();
+                foreach (var group in settings.groups)
+                {
+                    if (group == null) continue;
+
+                    foreach (var entry in group.entries)
+                    {
+                        if (entry == null) continue;
+
+                        string assetPath = AssetDatabase.GUIDToAssetPath(entry.guid);
+                        if (!string.IsNullOrEmpty(assetPath) && assetPath.EndsWith(".unity"))
+                        {
+                            addressableScenePaths.Add(assetPath);
+                        }
+                    }
+                }
+
+                // Save and close each loaded Addressables scene
+                for (int i = 0; i < SceneManager.sceneCount; i++)
+                {
+                    Scene scene = SceneManager.GetSceneAt(i);
+
+                    // Check if this is an Addressables scene and not the initial active scene
+                    if (addressableScenePaths.Contains(scene.path) && scene != initialActiveScene)
+                    {
+                        if (scene.isDirty)
+                        {
+                            GONetLog.Debug($"[GONet] Saving Addressables scene: {scene.path}");
+                            EditorSceneManager.SaveScene(scene);
+                        }
+
+                        GONetLog.Debug($"[GONet] Closing Addressables scene: {scene.path}");
+                        EditorSceneManager.CloseScene(scene, false); // Don't remove unsaved changes since we just saved
+                    }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                GONetLog.Error($"[GONet] Error while saving/closing Addressables scenes: {ex.Message}");
+            }
+        }
+#endif
 
         private static void GetGNPsWithinScene(Scene scene, out List<GONetParticipant> gonetParticipantsInOpenScenes)
         {
@@ -1360,16 +1806,1776 @@ namespace GONet.Generation
 
         private static void GenerateClass(GONetParticipant_ComponentsWithAutoSyncMembers uniqueEntry)
         {
-            var t4Template = new GONetParticipant_AutoMagicalSyncCompanion_GeneratedTemplate(uniqueEntry);
-            string generatedClassText = t4Template.TransformText();
+            // NEW: Use pure C# code generator instead of T4 template
+            var codeGenerator = new GONetParticipant_AutoMagicalSyncCompanion_CodeGenerator(uniqueEntry);
+            string generatedClassText = codeGenerator.Generate();
 
             if (!Directory.Exists(GENERATED_FILE_PATH))
             {
                 Directory.CreateDirectory(GENERATED_FILE_PATH);
             }
-            string writeToPath = string.Concat(GENERATED_FILE_PATH, t4Template.ClassName, C_SHARP_FILE_SUFFIX);
+            string writeToPath = string.Concat(GENERATED_FILE_PATH, codeGenerator.ClassName, C_SHARP_FILE_SUFFIX);
             File.WriteAllText(writeToPath, generatedClassText);
         }
+
+        #region RPC support
+        private static void GenerateAllRpcCompanions()
+        {
+            // Find all MonoBehaviours with RPC methods in the project
+            var rpcComponentTypes = new Dictionary<Type, List<MethodInfo>>();
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies().OrderBy(a => a.FullName))
+            {
+                if (TypeUtils.IsEditorOnlyAssembly(assembly)) continue;
+                var types = assembly.GetLoadableTypes()
+                    .Where(t => typeof(MonoBehaviour).IsAssignableFrom(t) && !t.IsAbstract)
+                    .OrderBy(t => t.FullName);
+                foreach (var type in types)
+                {
+                    var rpcMethods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                        .Where(m => m.GetCustomAttribute<GONetRpcAttribute>() != null)
+                        .OrderBy(m => m.Name)
+                        .ToList();
+                    if (rpcMethods.Any())
+                    {
+                        rpcComponentTypes[type] = rpcMethods;
+                    }
+                }
+            }
+
+            // Generate a companion class for each component type with RPCs
+            foreach (var kvp in rpcComponentTypes)
+            {
+                Type componentType = kvp.Key;
+                List<MethodInfo> rpcMethods = kvp.Value;
+
+                // Validate at generation time
+                var errors = new List<string>();
+                if (!typeof(GONetParticipantCompanionBehaviour).IsAssignableFrom(componentType))
+                {
+                    errors.Add($"ERROR: Class '{componentType.FullName}' has RPC methods but doesn't extend GONetParticipantCompanionBehaviour");
+                    errors.Add($"  FIX: public class {componentType.FullName} : GONetParticipantCompanionBehaviour");
+                }
+
+                foreach (var method in rpcMethods)
+                {
+                    ValidateRpcMethod(componentType, method, errors, false, false); // Context validation happens at runtime
+                }
+
+                if (errors.Any())
+                {
+                    string errorMsg = $"\n====== GONet RPC Validation Failed ======\n{string.Join("\n", errors)}\n=========================================";
+                    Debug.LogError(errorMsg);
+                    continue; // Skip generation for this type
+                }
+
+                // Special handling for base class vs derived classes
+                if (componentType == typeof(GONetParticipantCompanionBehaviour))
+                {
+                    // For the base class itself, only generate for its own methods
+                    GenerateRpcCode(componentType, rpcMethods.Where(m => m.DeclaringType == componentType).ToList());
+                }
+                else
+                {
+                    // For derived classes, pass ALL methods (including inherited base methods)
+                    // The GenerateRpcCode method will separate them internally
+                    GenerateRpcCode(componentType, rpcMethods);
+                }
+            }
+        }
+
+        private static void GenerateRpcCode(Type componentType, IEnumerable<MethodInfo> rpcMethods)
+        {
+            var sb = new StringBuilder();
+            string className = componentType.Name;
+            string generatedFileName = $"{className}_RPC_Generated";
+
+            // Separate base class and derived class methods
+            var baseRpcMethods = rpcMethods.Where(m => m.DeclaringType == typeof(GONetParticipantCompanionBehaviour)).ToList();
+            var derivedRpcMethods = rpcMethods.Where(m => m.DeclaringType == componentType).ToList();
+
+            // File header
+            sb.AppendLine("// GENERATED BY GONet - DO NOT EDIT");
+            sb.AppendLine("using System;");
+            sb.AppendLine("using System.Collections.Generic;");
+            sb.AppendLine("using System.Threading.Tasks;");
+            sb.AppendLine("using UnityEngine;");
+            sb.AppendLine("using GONet;");
+            sb.AppendLine("using GONet.Utils;");
+            sb.AppendLine("using MemoryPack;");
+            sb.AppendLine();
+            sb.AppendLine($"namespace {(string.IsNullOrWhiteSpace(componentType.Namespace) ? "GONet" : componentType.Namespace)}");
+            sb.AppendLine("{");
+
+            // Generate RPC ID constants (includes both base and derived)
+            GenerateRpcIdConstants(sb, className, baseRpcMethods, derivedRpcMethods);
+
+            // Add initialization class
+            GenerateInitializationClass(sb, className);
+
+            // Generate Dispatcher class
+            sb.AppendLine($"    internal class {className}_RpcDispatcher : IRpcDispatcher");
+            sb.AppendLine("    {");
+            sb.AppendLine("        private static bool isInitialized = false;");
+            sb.AppendLine();
+
+            // Generate const strings for method names (only derived class methods)
+            foreach (var method in derivedRpcMethods)
+            {
+                sb.AppendLine($"        private const string {method.Name.ToUpper()} = nameof({className}.{method.Name});");
+            }
+            sb.AppendLine();
+
+            // Generate property accessor delegates for TargetRpcs (only derived)
+            GenerateTargetPropertyAccessors(sb, componentType, derivedRpcMethods);
+
+            // Generate validation delegates (only derived)
+            GenerateValidationDelegates(sb, componentType, derivedRpcMethods);
+
+            // Generate deserialization delegates for async validation (only derived, only with parameters)
+            GenerateDeserializationDelegates(sb, componentType, derivedRpcMethods);
+
+            GenerateMetadataDictionaryWithBase(sb, componentType, baseRpcMethods, derivedRpcMethods);
+
+            // Generate dispatcher methods (only for derived)
+            GenerateDispatcherMethods(sb, componentType, derivedRpcMethods);
+
+            // Static constructor
+            GenerateStaticConstructor(sb, className, componentType, baseRpcMethods, derivedRpcMethods);
+
+            // Force initialization method
+            sb.AppendLine();
+            sb.AppendLine("        internal static void EnsureInitialized()");
+            sb.AppendLine("        {");
+            sb.AppendLine("            _ = Metadata;");
+            sb.AppendLine("        }");
+
+            // RPC handler registration (only for derived methods)
+            sb.AppendLine();
+            sb.AppendLine("        private static void RegisterRpcHandlers()");
+            sb.AppendLine("        {");
+            sb.AppendLine("            var eventBus = GONetMain.EventBus;");
+
+            foreach (var method in derivedRpcMethods)
+            {
+                GenerateRpcHandlerRegistration(sb, method, className);
+            }
+
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine();
+
+            // Generate parameter data structures (only for derived)
+            var processedTypes = new HashSet<string>();
+            foreach (var method in derivedRpcMethods.Where(m => m.GetParameters().Any()))
+            {
+                GenerateParameterDataStruct(sb, method, processedTypes);
+            }
+
+            sb.AppendLine("}");
+
+            // Write to file
+            string rpcsFolderPath = $"{GENERATED_FILE_PATH}RPCs/";
+            if (!Directory.Exists(rpcsFolderPath))
+            {
+                Directory.CreateDirectory(rpcsFolderPath);
+            }
+
+            string filePath = $"{rpcsFolderPath}{generatedFileName}.cs";
+            File.WriteAllText(filePath, sb.ToString());
+        }
+
+        private static void GenerateRpcIdConstants(StringBuilder sb, string className, List<MethodInfo> baseRpcMethods, List<MethodInfo> derivedRpcMethods)
+        {
+            sb.AppendLine($"    internal static class {className}_RpcIds");
+            sb.AppendLine("    {");
+
+            // Include base class RPC IDs if this is a derived class
+            if (baseRpcMethods.Any())
+            {
+                sb.AppendLine("        // Base class RPC IDs");
+                foreach (var method in baseRpcMethods)
+                {
+                    uint rpcId = GONetEventBus.GetRpcId(typeof(GONetParticipantCompanionBehaviour), method.Name);
+                    sb.AppendLine($"        internal const uint {method.Name}_RpcId = 0x{rpcId:X8};");
+                }
+                if (derivedRpcMethods.Any())
+                {
+                    sb.AppendLine();
+                }
+            }
+
+            // Derived class RPC IDs
+            if (derivedRpcMethods.Any())
+            {
+                sb.AppendLine("        // Derived class RPC IDs");
+                foreach (var method in derivedRpcMethods)
+                {
+                    uint rpcId = GONetEventBus.GetRpcId(method.DeclaringType, method.Name);
+                    sb.AppendLine($"        internal const uint {method.Name}_RpcId = 0x{rpcId:X8};");
+                }
+            }
+
+            sb.AppendLine("    }");
+            sb.AppendLine();
+        }
+
+        private static void GenerateInitializationClass(StringBuilder sb, string className)
+        {
+            sb.AppendLine($"    internal static class {className}_RpcInitializer");
+            sb.AppendLine("    {");
+            sb.AppendLine("        [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.BeforeSceneLoad)]");
+            sb.AppendLine("        private static void Initialize()");
+            sb.AppendLine("        {");
+            sb.AppendLine($"            {className}_RpcDispatcher.EnsureInitialized();");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine();
+        }
+
+        private static void GenerateMetadataDictionaryWithBase(StringBuilder sb, Type componentType, List<MethodInfo> baseRpcMethods, List<MethodInfo> derivedRpcMethods)
+        {
+            sb.AppendLine("        public static readonly Dictionary<string, RpcMetadata> Metadata = new Dictionary<string, RpcMetadata>");
+            sb.AppendLine("        {");
+
+            // Add base class RPCs first
+            if (baseRpcMethods.Any())
+            {
+                sb.AppendLine("            // Base class RPCs");
+                foreach (var method in baseRpcMethods)
+                {
+                    GenerateMetadataEntry(sb, method, typeof(GONetParticipantCompanionBehaviour));
+                }
+            }
+
+            // Add derived class RPCs
+            if (derivedRpcMethods.Any())
+            {
+                sb.AppendLine("            // Derived class RPCs");
+                foreach (var method in derivedRpcMethods)
+                {
+                    GenerateMetadataEntry(sb, method, componentType);
+                }
+            }
+
+            sb.AppendLine("        };");
+            sb.AppendLine();
+        }
+
+        private static void GenerateMetadataEntry(StringBuilder sb, MethodInfo method, Type declaringType)
+        {
+            var attr = method.GetCustomAttribute<GONetRpcAttribute>();
+            string rpcType = "RpcType.ServerRpc";
+            string target = "RpcTarget.All";
+            string targetPropertyName = "null";
+            string isMultipleTargets = "false";
+            string validationMethodName = "null";
+            bool expectsDeliveryReport = false;
+
+            // Determine RPC type and properties
+            if (attr is ClientRpcAttribute)
+            {
+                rpcType = "RpcType.ClientRpc";
+            }
+            else if (attr is TargetRpcAttribute targetAttr)
+            {
+                rpcType = "RpcType.TargetRpc";
+                target = $"RpcTarget.{targetAttr.Target}";
+                if (!string.IsNullOrEmpty(targetAttr.TargetPropertyName))
+                {
+                    targetPropertyName = $"\"{targetAttr.TargetPropertyName}\"";
+                    isMultipleTargets = targetAttr.IsMultipleTargets ? "true" : "false";
+                }
+                if (!string.IsNullOrEmpty(targetAttr.ValidationMethodName))
+                {
+                    validationMethodName = $"\"{targetAttr.ValidationMethodName}\"";
+                }
+            }
+
+            // Check if expecting delivery report
+            if (attr is TargetRpcAttribute)
+            {
+                if (method.ReturnType.IsGenericType &&
+                    method.ReturnType.GetGenericTypeDefinition() == typeof(Task<>) &&
+                    method.ReturnType.GetGenericArguments()[0] == typeof(RpcDeliveryReport))
+                {
+                    expectsDeliveryReport = true;
+                }
+            }
+
+            // Use appropriate class name based on declaring type
+            string methodClassName = declaringType == typeof(GONetParticipantCompanionBehaviour) ?
+                "GONetParticipantCompanionBehaviour" : declaringType.FullName;
+
+            sb.AppendLine($"            {{ nameof({methodClassName}.{method.Name}), new RpcMetadata {{ ");
+            sb.AppendLine($"                Type = {rpcType}, ");
+            sb.AppendLine($"                IsReliable = {attr.IsReliable.ToString().ToLower()}, ");
+            sb.AppendLine($"                IsMineRequired = {attr.IsMineRequired.ToString().ToLower()}, ");
+            sb.AppendLine($"                IsPersistent = {attr.IsPersistent.ToString().ToLower()}, ");
+            sb.AppendLine($"                Target = {target}, ");
+            sb.AppendLine($"                TargetPropertyName = {targetPropertyName},");
+            sb.AppendLine($"                IsMultipleTargets = {isMultipleTargets},");
+            sb.AppendLine($"                ValidationMethodName = {validationMethodName},");
+            sb.AppendLine($"                ExpectsDeliveryReport = {expectsDeliveryReport.ToString().ToLower()}");
+            sb.AppendLine("            }},");
+        }
+
+        private static void GenerateStaticConstructor(StringBuilder sb, string className, Type componentType,
+    List<MethodInfo> baseRpcMethods, List<MethodInfo> derivedRpcMethods)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"        static {className}_RpcDispatcher()");
+            sb.AppendLine("        {");
+            sb.AppendLine("            if (!isInitialized)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                isInitialized = true;");
+
+            // Register RpcId mappings for base methods
+            if (baseRpcMethods.Any())
+            {
+                foreach (var method in baseRpcMethods)
+                {
+                    uint rpcId = GONetEventBus.GetRpcId(typeof(GONetParticipantCompanionBehaviour), method.Name);
+                    sb.AppendLine($"                GONetMain.EventBus.RegisterRpcIdMapping(0x{rpcId:X8}, nameof(GONetParticipantCompanionBehaviour.{method.Name}), typeof({className}));");
+                }
+            }
+
+            // Register RpcId mappings for derived methods
+            foreach (var method in derivedRpcMethods)
+            {
+                uint rpcId = GONetEventBus.GetRpcId(componentType, method.Name);
+                sb.AppendLine($"                GONetMain.EventBus.RegisterRpcIdMapping(0x{rpcId:X8}, nameof({className}.{method.Name}), typeof({className}));");
+            }
+
+            sb.AppendLine($"                GONetMain.EventBus.RegisterRpcDispatcher(typeof({className}), new {className}_RpcDispatcher());");
+            sb.AppendLine($"                GONetMain.EventBus.RegisterRpcMetadata(typeof({className}), Metadata);");
+
+            // Only register if we actually generated these collections
+            bool hasTargetRpcs = derivedRpcMethods.Any(m => m.GetCustomAttribute<TargetRpcAttribute>() != null);
+            if (hasTargetRpcs)
+            {
+                sb.AppendLine("                if (TargetPropertyAccessors.Count > 0)");
+                sb.AppendLine($"                    GONetMain.EventBus.RegisterTargetPropertyAccessors(typeof({className}), TargetPropertyAccessors);");
+                sb.AppendLine("                if (MultiTargetPropertyAccessors.Count > 0)");
+                sb.AppendLine($"                    GONetMain.EventBus.RegisterMultiTargetPropertyAccessors(typeof({className}), MultiTargetPropertyAccessors);");
+            }
+
+            // Only check for validators if we have TargetRpcs with validation methods
+            bool hasValidation = derivedRpcMethods.Any(m =>
+            {
+                var attr = m.GetCustomAttribute<TargetRpcAttribute>();
+                return attr != null && !string.IsNullOrEmpty(attr.ValidationMethodName);
+            });
+
+            if (hasValidation)
+            {
+                // Check if we have sync validators (EnhancedValidators dictionary was generated)
+                bool hasSyncValidators = derivedRpcMethods.Any(m =>
+                {
+                    var attr = m.GetCustomAttribute<TargetRpcAttribute>();
+                    if (attr != null && !string.IsNullOrEmpty(attr.ValidationMethodName))
+                    {
+                        var valMethod = componentType.GetMethod(attr.ValidationMethodName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                        return valMethod != null && !IsAsyncValidationMethod(valMethod) && HasMatchingValidationSignature(m, valMethod);
+                    }
+                    return false;
+                });
+
+                // Check if we have async validators (AsyncValidators dictionary was generated)
+                bool hasAsyncValidators = derivedRpcMethods.Any(m =>
+                {
+                    var attr = m.GetCustomAttribute<TargetRpcAttribute>();
+                    if (attr != null && !string.IsNullOrEmpty(attr.ValidationMethodName))
+                    {
+                        var valMethod = componentType.GetMethod(attr.ValidationMethodName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                        return valMethod != null && IsAsyncValidationMethod(valMethod) && HasMatchingValidationSignature(m, valMethod);
+                    }
+                    return false;
+                });
+
+                // Register sync validators (only if they exist)
+                if (hasSyncValidators)
+                {
+                    sb.AppendLine("                if (EnhancedValidators != null && EnhancedValidators.Count > 0)");
+                    sb.AppendLine($"                    GONetMain.EventBus.RegisterEnhancedValidators(typeof({className}), EnhancedValidators, ValidatorParameterCounts);");
+                }
+
+                // Register async validators (only if they exist)
+                if (hasAsyncValidators)
+                {
+                    sb.AppendLine("                if (AsyncValidators != null && AsyncValidators.Count > 0)");
+                    sb.AppendLine($"                    GONetMain.EventBus.RegisterAsyncValidators(typeof({className}), AsyncValidators, ValidatorParameterCounts);");
+
+                    // Register deserialization and serialization delegates for async validators with parameters
+                    sb.AppendLine("                if (RpcDeserializers != null && RpcDeserializers.Count > 0)");
+                    sb.AppendLine($"                    GONetMain.EventBus.RegisterRpcDeserializers(typeof({className}), RpcDeserializers);");
+                    sb.AppendLine("                if (RpcSerializers != null && RpcSerializers.Count > 0)");
+                    sb.AppendLine($"                    GONetMain.EventBus.RegisterRpcSerializers(typeof({className}), RpcSerializers);");
+                }
+            }
+
+            sb.AppendLine("                RegisterRpcHandlers();");
+            sb.AppendLine($"                GONetLog.Debug(\"Initialized RPC dispatcher for {className}\");");
+            sb.AppendLine("            }");
+            sb.AppendLine("        }");
+        }
+
+        private static void GenerateTargetPropertyAccessors(StringBuilder sb, Type componentType, IEnumerable<MethodInfo> rpcMethods)
+        {
+            // Single target accessors
+            sb.AppendLine("        // Property accessor delegates for single targets");
+            sb.AppendLine("        private static readonly Dictionary<string, Func<object, ushort>> TargetPropertyAccessors = ");
+            sb.AppendLine("            new Dictionary<string, Func<object, ushort>>");
+            sb.AppendLine("        {");
+
+            foreach (var method in rpcMethods)
+            {
+                var targetAttr = method.GetCustomAttribute<TargetRpcAttribute>();
+                if (targetAttr != null && !string.IsNullOrEmpty(targetAttr.TargetPropertyName) && !targetAttr.IsMultipleTargets)
+                {
+                    var property = componentType.GetProperty(targetAttr.TargetPropertyName,
+                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                    if (property != null && property.PropertyType == typeof(ushort))
+                    {
+                        sb.AppendLine($"            {{ nameof({componentType.FullName}.{method.Name}), ");
+                        sb.AppendLine($"              (obj) => (({componentType.FullName})obj).{targetAttr.TargetPropertyName} }},");
+                    }
+                }
+            }
+            sb.AppendLine("        };");
+            sb.AppendLine();
+
+            // Multi-target accessors that fill buffer
+            sb.AppendLine("        // Property accessor delegates for multiple targets (fills buffer, returns count)");
+            sb.AppendLine("        private static readonly Dictionary<string, Func<object, ushort[], int>> MultiTargetPropertyAccessors = ");
+            sb.AppendLine("            new Dictionary<string, Func<object, ushort[], int>>");
+            sb.AppendLine("        {");
+
+            foreach (var method in rpcMethods)
+            {
+                var targetAttr = method.GetCustomAttribute<TargetRpcAttribute>();
+                if (targetAttr != null && !string.IsNullOrEmpty(targetAttr.TargetPropertyName) && targetAttr.IsMultipleTargets)
+                {
+                    var property = componentType.GetProperty(targetAttr.TargetPropertyName,
+                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                    if (property != null)
+                    {
+                        if (property.PropertyType == typeof(List<ushort>))
+                        {
+                            sb.AppendLine($"            {{ nameof({componentType.FullName}.{method.Name}), ");
+                            sb.AppendLine($"              (obj, buffer) => ");
+                            sb.AppendLine($"              {{");
+                            sb.AppendLine($"                  var list = (({componentType.FullName})obj).{targetAttr.TargetPropertyName};");
+                            sb.AppendLine($"                  if (list == null) return 0;");
+                            sb.AppendLine($"                  int count = Math.Min(list.Count, buffer.Length);");
+                            sb.AppendLine($"                  for (int i = 0; i < count; i++) buffer[i] = list[i];");
+                            sb.AppendLine($"                  return count;");
+                            sb.AppendLine($"              }} }},");
+                        }
+                        else if (property.PropertyType == typeof(ushort[]))
+                        {
+                            sb.AppendLine($"            {{ nameof({componentType.FullName}.{method.Name}), ");
+                            sb.AppendLine($"              (obj, buffer) => ");
+                            sb.AppendLine($"              {{");
+                            sb.AppendLine($"                  var array = (({componentType.FullName})obj).{targetAttr.TargetPropertyName};");
+                            sb.AppendLine($"                  if (array == null) return 0;");
+                            sb.AppendLine($"                  int count = Math.Min(array.Length, buffer.Length);");
+                            sb.AppendLine($"                  Array.Copy(array, buffer, count);");
+                            sb.AppendLine($"                  return count;");
+                            sb.AppendLine($"              }} }},");
+                        }
+                    }
+                }
+            }
+            sb.AppendLine("        };");
+            sb.AppendLine();
+        }
+
+        private static void GenerateValidationDelegates(StringBuilder sb, Type componentType, IEnumerable<MethodInfo> rpcMethods)
+        {
+            // First collect all validation info, separating sync and async validators
+            var syncValidatorInfo = new List<(MethodInfo rpcMethod, MethodInfo validationMethod, TargetRpcAttribute attr, int paramCount)>();
+            var asyncValidatorInfo = new List<(MethodInfo rpcMethod, MethodInfo validationMethod, TargetRpcAttribute attr, int paramCount)>();
+
+            foreach (var method in rpcMethods)
+            {
+                var targetAttr = method.GetCustomAttribute<TargetRpcAttribute>();
+                if (targetAttr != null && !string.IsNullOrEmpty(targetAttr.ValidationMethodName))
+                {
+                    var validationMethod = componentType.GetMethod(targetAttr.ValidationMethodName,
+                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+                    if (validationMethod != null && HasMatchingValidationSignature(method, validationMethod))
+                    {
+                        var paramCount = method.GetParameters().Length;
+
+                        // Separate sync and async validators
+                        if (IsAsyncValidationMethod(validationMethod))
+                        {
+                            asyncValidatorInfo.Add((method, validationMethod, targetAttr, paramCount));
+                        }
+                        else
+                        {
+                            syncValidatorInfo.Add((method, validationMethod, targetAttr, paramCount));
+                        }
+                    }
+                }
+            }
+
+            // Generate parameter count metadata dictionary (shared by sync and async validators)
+            sb.AppendLine("        // Parameter count metadata for validators (sync and async)");
+            sb.AppendLine("        private static readonly Dictionary<string, int> ValidatorParameterCounts = ");
+            sb.AppendLine("            new Dictionary<string, int>");
+            sb.AppendLine("        {");
+
+            foreach (var (rpcMethod, validationMethod, targetAttr, paramCount) in syncValidatorInfo)
+            {
+                sb.AppendLine($"            {{ nameof({componentType.Name}.{rpcMethod.Name}), {paramCount} }},");
+            }
+            foreach (var (rpcMethod, validationMethod, targetAttr, paramCount) in asyncValidatorInfo)
+            {
+                sb.AppendLine($"            {{ nameof({componentType.Name}.{rpcMethod.Name}), {paramCount} }},");
+            }
+
+            sb.AppendLine("        };");
+            sb.AppendLine();
+
+            // Generate SYNC validation delegates dictionary
+            if (syncValidatorInfo.Count > 0)
+            {
+                sb.AppendLine("        // SYNC validation delegates (RpcValidationResult with ref parameters)");
+                sb.AppendLine("        private static readonly Dictionary<string, object> EnhancedValidators = ");
+                sb.AppendLine("            new Dictionary<string, object>");
+                sb.AppendLine("        {");
+
+                foreach (var (rpcMethod, validationMethod, targetAttr, paramCount) in syncValidatorInfo)
+                {
+                    var rpcParams = rpcMethod.GetParameters();
+
+                    sb.AppendLine($"            {{ nameof({componentType.Name}.{rpcMethod.Name}),");
+
+                    // Generate appropriate delegate based on parameter count
+                    switch (paramCount)
+                    {
+                        case 0:
+                            GenerateZeroParamValidator(sb, componentType, rpcMethod, targetAttr);
+                            break;
+                        case 1:
+                            GenerateOneParamValidator(sb, componentType, rpcMethod, targetAttr, rpcParams[0]);
+                            break;
+                        case 2:
+                            GenerateTwoParamValidator(sb, componentType, rpcMethod, targetAttr, rpcParams);
+                            break;
+                        case 3:
+                            GenerateThreeParamValidator(sb, componentType, rpcMethod, targetAttr, rpcParams);
+                            break;
+                        case 4:
+                            GenerateFourParamValidator(sb, componentType, rpcMethod, targetAttr, rpcParams);
+                            break;
+                        case 5:
+                            GenerateFiveParamValidator(sb, componentType, rpcMethod, targetAttr, rpcParams);
+                            break;
+                        case 6:
+                            GenerateSixParamValidator(sb, componentType, rpcMethod, targetAttr, rpcParams);
+                            break;
+                        case 7:
+                            GenerateSevenParamValidator(sb, componentType, rpcMethod, targetAttr, rpcParams);
+                            break;
+                        case 8:
+                            GenerateEightParamValidator(sb, componentType, rpcMethod, targetAttr, rpcParams);
+                            break;
+                        default:
+                            throw new InvalidOperationException($"Validation methods with {paramCount} parameters are not currently supported. Maximum is 8 parameters.");
+                    }
+
+                    sb.AppendLine("            },");
+                }
+
+                sb.AppendLine("        };");
+                sb.AppendLine();
+            }
+
+            // Generate ASYNC validation MethodInfo dictionary
+            if (asyncValidatorInfo.Count > 0)
+            {
+                sb.AppendLine("        // ASYNC validation MethodInfo registry (Task<RpcValidationResult> without ref parameters)");
+                sb.AppendLine("        private static readonly Dictionary<string, System.Reflection.MethodInfo> AsyncValidators = ");
+                sb.AppendLine("            new Dictionary<string, System.Reflection.MethodInfo>");
+                sb.AppendLine("        {");
+
+                foreach (var (rpcMethod, validationMethod, targetAttr, paramCount) in asyncValidatorInfo)
+                {
+                    sb.AppendLine($"            {{ nameof({componentType.Name}.{rpcMethod.Name}), ");
+                    sb.AppendLine($"              typeof({componentType.Name}).GetMethod(nameof({componentType.Name}.{validationMethod.Name}), ");
+                    sb.AppendLine($"                  System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance) }},");
+                }
+
+                sb.AppendLine("        };");
+                sb.AppendLine();
+            }
+        }
+
+        /// <summary>
+        /// Generates typed deserialization delegates for RPC parameters.
+        /// These delegates are used by async validation to deserialize byte[] -> object[] with correct types.
+        /// </summary>
+        private static void GenerateDeserializationDelegates(StringBuilder sb, Type componentType, IEnumerable<MethodInfo> rpcMethods)
+        {
+            // Collect all TargetRPCs that have async validators with parameters
+            var rpcMethodsWithAsyncValidators = new List<(MethodInfo rpcMethod, int paramCount)>();
+
+            foreach (var method in rpcMethods)
+            {
+                var targetAttr = method.GetCustomAttribute<TargetRpcAttribute>();
+                if (targetAttr != null && !string.IsNullOrEmpty(targetAttr.ValidationMethodName))
+                {
+                    var validationMethod = componentType.GetMethod(targetAttr.ValidationMethodName,
+                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+                    if (validationMethod != null && IsAsyncValidationMethod(validationMethod))
+                    {
+                        var paramCount = method.GetParameters().Length;
+                        if (paramCount > 0) // Only generate for methods with parameters
+                        {
+                            rpcMethodsWithAsyncValidators.Add((method, paramCount));
+                        }
+                    }
+                }
+            }
+
+            // Only generate if we have async validators with parameters
+            if (rpcMethodsWithAsyncValidators.Count == 0)
+            {
+                return;
+            }
+
+            sb.AppendLine("        // Typed deserialization delegates for async validation");
+            sb.AppendLine("        // These delegates convert byte[] -> object[] using the correct RpcDataN types");
+            sb.AppendLine("        private static readonly Dictionary<string, System.Func<byte[], object[]>> RpcDeserializers = ");
+            sb.AppendLine("            new Dictionary<string, System.Func<byte[], object[]>>");
+            sb.AppendLine("        {");
+
+            foreach (var (rpcMethod, paramCount) in rpcMethodsWithAsyncValidators)
+            {
+                string dataTypeName = GetParameterDataStructName(rpcMethod);
+                var parameters = rpcMethod.GetParameters();
+
+                sb.AppendLine($"            {{ nameof({componentType.Name}.{rpcMethod.Name}), (data) =>");
+                sb.AppendLine("            {");
+                sb.AppendLine($"                var deserialized = SerializationUtils.DeserializeFromBytes<{dataTypeName}>(data);");
+                sb.Append("                return new object[] { ");
+
+                // Generate array of parameter accesses
+                for (int i = 0; i < paramCount; i++)
+                {
+                    if (i > 0) sb.Append(", ");
+                    sb.Append($"deserialized.{parameters[i].Name}");
+                }
+
+                sb.AppendLine(" };");
+                sb.AppendLine("            }},");
+            }
+
+            sb.AppendLine("        };");
+            sb.AppendLine();
+
+            // Generate serialization delegates for the same methods
+            sb.AppendLine("        // Typed serialization delegates for async validation (parameter modification)");
+            sb.AppendLine("        // These delegates convert object[] -> byte[] using the correct RpcDataN types");
+            sb.AppendLine("        private static readonly Dictionary<string, System.Func<object[], byte[]>> RpcSerializers = ");
+            sb.AppendLine("            new Dictionary<string, System.Func<object[], byte[]>>");
+            sb.AppendLine("        {");
+
+            foreach (var (rpcMethod, paramCount) in rpcMethodsWithAsyncValidators)
+            {
+                string dataTypeName = GetParameterDataStructName(rpcMethod);
+                var parameters = rpcMethod.GetParameters();
+
+                sb.AppendLine($"            {{ nameof({componentType.Name}.{rpcMethod.Name}), (args) =>");
+                sb.AppendLine("            {");
+                sb.AppendLine($"                var data = new {dataTypeName}");
+                sb.AppendLine("                {");
+
+                // Generate property assignments
+                for (int i = 0; i < paramCount; i++)
+                {
+                    string paramType = GetFriendlyTypeName(parameters[i].ParameterType);
+                    sb.AppendLine($"                    {parameters[i].Name} = ({paramType})args[{i}],");
+                }
+
+                sb.AppendLine("                };");
+                sb.AppendLine("                int bytesUsed;");
+                sb.AppendLine("                bool needsReturn;");
+                sb.AppendLine("                return SerializationUtils.SerializeToBytes(data, out bytesUsed, out needsReturn);");
+                sb.AppendLine("            }},");
+            }
+
+            sb.AppendLine("        };");
+            sb.AppendLine();
+        }
+
+        private static bool HasMatchingValidationSignature(MethodInfo rpcMethod, MethodInfo validationMethod)
+        {
+            // Check for sync validator: RpcValidationResult with ref parameters
+            if (validationMethod.ReturnType == typeof(RpcValidationResult))
+            {
+                var rpcParams = rpcMethod.GetParameters();
+                var valParams = validationMethod.GetParameters();
+
+                if (rpcParams.Length != valParams.Length)
+                    return false;
+
+                for (int i = 0; i < rpcParams.Length; i++)
+                {
+                    if (!valParams[i].ParameterType.IsByRef)
+                        return false;
+
+                    var valType = valParams[i].ParameterType.GetElementType();
+                    if (valType != rpcParams[i].ParameterType)
+                        return false;
+                }
+
+                return true;
+            }
+
+            // Check for async validator: Task<RpcValidationResult> WITHOUT ref parameters
+            if (validationMethod.ReturnType.IsGenericType &&
+                validationMethod.ReturnType.GetGenericTypeDefinition() == typeof(Task<>) &&
+                validationMethod.ReturnType.GetGenericArguments()[0] == typeof(RpcValidationResult))
+            {
+                var rpcParams = rpcMethod.GetParameters();
+                var valParams = validationMethod.GetParameters();
+
+                if (rpcParams.Length != valParams.Length)
+                    return false;
+
+                for (int i = 0; i < rpcParams.Length; i++)
+                {
+                    // Async validators CANNOT have ref parameters (C# limitation)
+                    if (valParams[i].ParameterType.IsByRef)
+                        return false;
+
+                    // Parameter types must match exactly (no ref)
+                    if (valParams[i].ParameterType != rpcParams[i].ParameterType)
+                        return false;
+                }
+
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Determines if a validation method is async based on its return type.
+        /// </summary>
+        private static bool IsAsyncValidationMethod(MethodInfo validationMethod)
+        {
+            return validationMethod.ReturnType.IsGenericType &&
+                   validationMethod.ReturnType.GetGenericTypeDefinition() == typeof(Task<>) &&
+                   validationMethod.ReturnType.GetGenericArguments()[0] == typeof(RpcValidationResult);
+        }
+
+        private static void GenerateZeroParamValidator(StringBuilder sb, Type componentType, MethodInfo method, TargetRpcAttribute targetAttr)
+        {
+            sb.AppendLine($"              (Func<object, ushort, ushort[], int, RpcValidationResult>)((obj, source, targets, count) =>");
+            sb.AppendLine($"              {{");
+            sb.AppendLine($"                  var instance = ({componentType.Name})obj;");
+            sb.AppendLine($"                  var result = RpcValidationResult.CreatePreAllocated(count);");
+            sb.AppendLine($"                  ");
+            sb.AppendLine($"                  var validationContext = new RpcValidationContext");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      SourceAuthorityId = source,");
+            sb.AppendLine($"                      TargetAuthorityIds = targets,");
+            sb.AppendLine($"                      TargetCount = count,");
+            sb.AppendLine($"                      PreAllocatedResult = result");
+            sb.AppendLine($"                  }};");
+            sb.AppendLine($"                  ");
+            sb.AppendLine($"                  try");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      GONetMain.EventBus.SetValidationContext(validationContext);");
+            sb.AppendLine($"                      result = instance.{targetAttr.ValidationMethodName}();");
+            sb.AppendLine($"                      return result;");
+            sb.AppendLine($"                  }}");
+            sb.AppendLine($"                  finally");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      GONetMain.EventBus.ClearValidationContext();");
+            sb.AppendLine($"                  }}");
+            sb.AppendLine($"              }})");
+        }
+
+        private static void GenerateOneParamValidator(StringBuilder sb, Type componentType, MethodInfo method, TargetRpcAttribute targetAttr, ParameterInfo param)
+        {
+            string dataTypeName = GetParameterDataStructName(method);
+            string paramType = GetFriendlyTypeName(param.ParameterType);
+
+            sb.AppendLine($"              (Func<object, ushort, ushort[], int, byte[], RpcValidationResult>)((obj, source, targets, count, data) =>");
+            sb.AppendLine($"              {{");
+            sb.AppendLine($"                  var instance = ({componentType.Name})obj;");
+            sb.AppendLine($"                  var result = RpcValidationResult.CreatePreAllocated(count);");
+            sb.AppendLine($"                  ");
+            sb.AppendLine($"                  var validationContext = new RpcValidationContext");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      SourceAuthorityId = source,");
+            sb.AppendLine($"                      TargetAuthorityIds = targets,");
+            sb.AppendLine($"                      TargetCount = count,");
+            sb.AppendLine($"                      PreAllocatedResult = result");
+            sb.AppendLine($"                  }};");
+            sb.AppendLine($"                  ");
+            sb.AppendLine($"                  try");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      GONetMain.EventBus.SetValidationContext(validationContext);");
+            sb.AppendLine($"                      var args = SerializationUtils.DeserializeFromBytes<{dataTypeName}>(data);");
+            sb.AppendLine($"                      var {param.Name} = args.{param.Name};");
+            sb.AppendLine($"                      result = instance.{targetAttr.ValidationMethodName}(ref {param.Name});");
+            sb.AppendLine($"                      ");
+            sb.AppendLine($"                      if (result.WasModified)");
+            sb.AppendLine($"                      {{");
+            sb.AppendLine($"                          args.{param.Name} = {param.Name};");
+            sb.AppendLine($"                          int bytesUsed;");
+            sb.AppendLine($"                          bool needsReturn;");
+            sb.AppendLine($"                          result.ModifiedData = SerializationUtils.SerializeToBytes(args, out bytesUsed, out needsReturn);");
+            sb.AppendLine($"                      }}");
+            sb.AppendLine($"                      return result;");
+            sb.AppendLine($"                  }}");
+            sb.AppendLine($"                  finally");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      GONetMain.EventBus.ClearValidationContext();");
+            sb.AppendLine($"                  }}");
+            sb.AppendLine($"              }})");
+        }
+
+        private static void GenerateTwoParamValidator(StringBuilder sb, Type componentType, MethodInfo method, TargetRpcAttribute targetAttr, ParameterInfo[] parameters)
+        {
+            string dataTypeName = GetParameterDataStructName(method);
+
+            sb.AppendLine($"              (Func<object, ushort, ushort[], int, byte[], RpcValidationResult>)((obj, source, targets, count, data) =>");
+            sb.AppendLine($"              {{");
+            sb.AppendLine($"                  var instance = ({componentType.Name})obj;");
+            sb.AppendLine($"                  var result = RpcValidationResult.CreatePreAllocated(count);");
+            sb.AppendLine($"                  ");
+            sb.AppendLine($"                  var validationContext = new RpcValidationContext");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      SourceAuthorityId = source,");
+            sb.AppendLine($"                      TargetAuthorityIds = targets,");
+            sb.AppendLine($"                      TargetCount = count,");
+            sb.AppendLine($"                      PreAllocatedResult = result");
+            sb.AppendLine($"                  }};");
+            sb.AppendLine($"                  ");
+            sb.AppendLine($"                  try");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      GONetMain.EventBus.SetValidationContext(validationContext);");
+            sb.AppendLine($"                      var args = SerializationUtils.DeserializeFromBytes<{dataTypeName}>(data);");
+
+            foreach (var param in parameters)
+            {
+                sb.AppendLine($"                      var {param.Name} = args.{param.Name};");
+            }
+
+            var refParams = string.Join(", ", parameters.Select(p => $"ref {p.Name}"));
+            sb.AppendLine($"                      result = instance.{targetAttr.ValidationMethodName}({refParams});");
+            sb.AppendLine($"                      ");
+            sb.AppendLine($"                      if (result.WasModified)");
+            sb.AppendLine($"                      {{");
+
+            foreach (var param in parameters)
+            {
+                sb.AppendLine($"                          args.{param.Name} = {param.Name};");
+            }
+
+            sb.AppendLine($"                          int bytesUsed;");
+            sb.AppendLine($"                          bool needsReturn;");
+            sb.AppendLine($"                          result.ModifiedData = SerializationUtils.SerializeToBytes(args, out bytesUsed, out needsReturn);");
+            sb.AppendLine($"                      }}");
+            sb.AppendLine($"                      return result;");
+            sb.AppendLine($"                  }}");
+            sb.AppendLine($"                  finally");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      GONetMain.EventBus.ClearValidationContext();");
+            sb.AppendLine($"                  }}");
+            sb.AppendLine($"              }})");
+        }
+
+        private static void GenerateThreeParamValidator(StringBuilder sb, Type componentType, MethodInfo method, TargetRpcAttribute targetAttr, ParameterInfo[] parameters)
+        {
+            string dataTypeName = GetParameterDataStructName(method);
+
+            sb.AppendLine($"              (Func<object, ushort, ushort[], int, byte[], RpcValidationResult>)((obj, source, targets, count, data) =>");
+            sb.AppendLine($"              {{");
+            sb.AppendLine($"                  var instance = ({componentType.Name})obj;");
+            sb.AppendLine($"                  var result = RpcValidationResult.CreatePreAllocated(count);");
+            sb.AppendLine($"                  ");
+            sb.AppendLine($"                  var validationContext = new RpcValidationContext");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      SourceAuthorityId = source,");
+            sb.AppendLine($"                      TargetAuthorityIds = targets,");
+            sb.AppendLine($"                      TargetCount = count,");
+            sb.AppendLine($"                      PreAllocatedResult = result");
+            sb.AppendLine($"                  }};");
+            sb.AppendLine($"                  ");
+            sb.AppendLine($"                  try");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      GONetMain.EventBus.SetValidationContext(validationContext);");
+            sb.AppendLine($"                      var args = SerializationUtils.DeserializeFromBytes<{dataTypeName}>(data);");
+
+            foreach (var param in parameters)
+            {
+                sb.AppendLine($"                      var {param.Name} = args.{param.Name};");
+            }
+
+            var refParams = string.Join(", ", parameters.Select(p => $"ref {p.Name}"));
+            sb.AppendLine($"                      result = instance.{targetAttr.ValidationMethodName}({refParams});");
+            sb.AppendLine($"                      ");
+            sb.AppendLine($"                      if (result.WasModified)");
+            sb.AppendLine($"                      {{");
+
+            foreach (var param in parameters)
+            {
+                sb.AppendLine($"                          args.{param.Name} = {param.Name};");
+            }
+
+            sb.AppendLine($"                          int bytesUsed;");
+            sb.AppendLine($"                          bool needsReturn;");
+            sb.AppendLine($"                          result.ModifiedData = SerializationUtils.SerializeToBytes(args, out bytesUsed, out needsReturn);");
+            sb.AppendLine($"                      }}");
+            sb.AppendLine($"                      return result;");
+            sb.AppendLine($"                  }}");
+            sb.AppendLine($"                  finally");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      GONetMain.EventBus.ClearValidationContext();");
+            sb.AppendLine($"                  }}");
+            sb.AppendLine($"              }})");
+        }
+
+        private static void GenerateFourParamValidator(StringBuilder sb, Type componentType, MethodInfo method, TargetRpcAttribute targetAttr, ParameterInfo[] parameters)
+        {
+            string dataTypeName = GetParameterDataStructName(method);
+
+            sb.AppendLine($"              (Func<object, ushort, ushort[], int, byte[], RpcValidationResult>)((obj, source, targets, count, data) =>");
+            sb.AppendLine($"              {{");
+            sb.AppendLine($"                  var instance = ({componentType.Name})obj;");
+            sb.AppendLine($"                  var result = RpcValidationResult.CreatePreAllocated(count);");
+            sb.AppendLine($"                  ");
+            sb.AppendLine($"                  var validationContext = new RpcValidationContext");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      SourceAuthorityId = source,");
+            sb.AppendLine($"                      TargetAuthorityIds = targets,");
+            sb.AppendLine($"                      TargetCount = count,");
+            sb.AppendLine($"                      PreAllocatedResult = result");
+            sb.AppendLine($"                  }};");
+            sb.AppendLine($"                  ");
+            sb.AppendLine($"                  try");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      GONetMain.EventBus.SetValidationContext(validationContext);");
+            sb.AppendLine($"                      var args = SerializationUtils.DeserializeFromBytes<{dataTypeName}>(data);");
+
+            foreach (var param in parameters)
+            {
+                sb.AppendLine($"                      var {param.Name} = args.{param.Name};");
+            }
+
+            var refParams = string.Join(", ", parameters.Select(p => $"ref {p.Name}"));
+            sb.AppendLine($"                      result = instance.{targetAttr.ValidationMethodName}({refParams});");
+            sb.AppendLine($"                      ");
+            sb.AppendLine($"                      if (result.WasModified)");
+            sb.AppendLine($"                      {{");
+
+            foreach (var param in parameters)
+            {
+                sb.AppendLine($"                          args.{param.Name} = {param.Name};");
+            }
+
+            sb.AppendLine($"                          int bytesUsed;");
+            sb.AppendLine($"                          bool needsReturn;");
+            sb.AppendLine($"                          result.ModifiedData = SerializationUtils.SerializeToBytes(args, out bytesUsed, out needsReturn);");
+            sb.AppendLine($"                      }}");
+            sb.AppendLine($"                      return result;");
+            sb.AppendLine($"                  }}");
+            sb.AppendLine($"                  finally");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      GONetMain.EventBus.ClearValidationContext();");
+            sb.AppendLine($"                  }}");
+            sb.AppendLine($"              }})");
+        }
+
+        private static void GenerateFiveParamValidator(StringBuilder sb, Type componentType, MethodInfo method, TargetRpcAttribute targetAttr, ParameterInfo[] parameters)
+        {
+            string dataTypeName = GetParameterDataStructName(method);
+
+            sb.AppendLine($"              (Func<object, ushort, ushort[], int, byte[], RpcValidationResult>)((obj, source, targets, count, data) =>");
+            sb.AppendLine($"              {{");
+            sb.AppendLine($"                  var instance = ({componentType.Name})obj;");
+            sb.AppendLine($"                  var result = RpcValidationResult.CreatePreAllocated(count);");
+            sb.AppendLine($"                  ");
+            sb.AppendLine($"                  var validationContext = new RpcValidationContext");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      SourceAuthorityId = source,");
+            sb.AppendLine($"                      TargetAuthorityIds = targets,");
+            sb.AppendLine($"                      TargetCount = count,");
+            sb.AppendLine($"                      PreAllocatedResult = result");
+            sb.AppendLine($"                  }};");
+            sb.AppendLine($"                  ");
+            sb.AppendLine($"                  try");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      GONetMain.EventBus.SetValidationContext(validationContext);");
+            sb.AppendLine($"                      var args = SerializationUtils.DeserializeFromBytes<{dataTypeName}>(data);");
+
+            foreach (var param in parameters)
+            {
+                sb.AppendLine($"                      var {param.Name} = args.{param.Name};");
+            }
+
+            var refParams = string.Join(", ", parameters.Select(p => $"ref {p.Name}"));
+            sb.AppendLine($"                      result = instance.{targetAttr.ValidationMethodName}({refParams});");
+            sb.AppendLine($"                      ");
+            sb.AppendLine($"                      if (result.WasModified)");
+            sb.AppendLine($"                      {{");
+
+            foreach (var param in parameters)
+            {
+                sb.AppendLine($"                          args.{param.Name} = {param.Name};");
+            }
+
+            sb.AppendLine($"                          int bytesUsed;");
+            sb.AppendLine($"                          bool needsReturn;");
+            sb.AppendLine($"                          result.ModifiedData = SerializationUtils.SerializeToBytes(args, out bytesUsed, out needsReturn);");
+            sb.AppendLine($"                      }}");
+            sb.AppendLine($"                      return result;");
+            sb.AppendLine($"                  }}");
+            sb.AppendLine($"                  finally");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      GONetMain.EventBus.ClearValidationContext();");
+            sb.AppendLine($"                  }}");
+            sb.AppendLine($"              }})");
+        }
+
+        private static void GenerateSixParamValidator(StringBuilder sb, Type componentType, MethodInfo method, TargetRpcAttribute targetAttr, ParameterInfo[] parameters)
+        {
+            string dataTypeName = GetParameterDataStructName(method);
+
+            sb.AppendLine($"              (Func<object, ushort, ushort[], int, byte[], RpcValidationResult>)((obj, source, targets, count, data) =>");
+            sb.AppendLine($"              {{");
+            sb.AppendLine($"                  var instance = ({componentType.Name})obj;");
+            sb.AppendLine($"                  var result = RpcValidationResult.CreatePreAllocated(count);");
+            sb.AppendLine($"                  ");
+            sb.AppendLine($"                  var validationContext = new RpcValidationContext");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      SourceAuthorityId = source,");
+            sb.AppendLine($"                      TargetAuthorityIds = targets,");
+            sb.AppendLine($"                      TargetCount = count,");
+            sb.AppendLine($"                      PreAllocatedResult = result");
+            sb.AppendLine($"                  }};");
+            sb.AppendLine($"                  ");
+            sb.AppendLine($"                  try");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      GONetMain.EventBus.SetValidationContext(validationContext);");
+            sb.AppendLine($"                      var args = SerializationUtils.DeserializeFromBytes<{dataTypeName}>(data);");
+
+            foreach (var param in parameters)
+            {
+                sb.AppendLine($"                      var {param.Name} = args.{param.Name};");
+            }
+
+            var refParams = string.Join(", ", parameters.Select(p => $"ref {p.Name}"));
+            sb.AppendLine($"                      result = instance.{targetAttr.ValidationMethodName}({refParams});");
+            sb.AppendLine($"                      ");
+            sb.AppendLine($"                      if (result.WasModified)");
+            sb.AppendLine($"                      {{");
+
+            foreach (var param in parameters)
+            {
+                sb.AppendLine($"                          args.{param.Name} = {param.Name};");
+            }
+
+            sb.AppendLine($"                          int bytesUsed;");
+            sb.AppendLine($"                          bool needsReturn;");
+            sb.AppendLine($"                          result.ModifiedData = SerializationUtils.SerializeToBytes(args, out bytesUsed, out needsReturn);");
+            sb.AppendLine($"                      }}");
+            sb.AppendLine($"                      return result;");
+            sb.AppendLine($"                  }}");
+            sb.AppendLine($"                  finally");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      GONetMain.EventBus.ClearValidationContext();");
+            sb.AppendLine($"                  }}");
+            sb.AppendLine($"              }})");
+        }
+
+        private static void GenerateSevenParamValidator(StringBuilder sb, Type componentType, MethodInfo method, TargetRpcAttribute targetAttr, ParameterInfo[] parameters)
+        {
+            string dataTypeName = GetParameterDataStructName(method);
+
+            sb.AppendLine($"              (Func<object, ushort, ushort[], int, byte[], RpcValidationResult>)((obj, source, targets, count, data) =>");
+            sb.AppendLine($"              {{");
+            sb.AppendLine($"                  var instance = ({componentType.Name})obj;");
+            sb.AppendLine($"                  var result = RpcValidationResult.CreatePreAllocated(count);");
+            sb.AppendLine($"                  ");
+            sb.AppendLine($"                  var validationContext = new RpcValidationContext");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      SourceAuthorityId = source,");
+            sb.AppendLine($"                      TargetAuthorityIds = targets,");
+            sb.AppendLine($"                      TargetCount = count,");
+            sb.AppendLine($"                      PreAllocatedResult = result");
+            sb.AppendLine($"                  }};");
+            sb.AppendLine($"                  ");
+            sb.AppendLine($"                  try");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      GONetMain.EventBus.SetValidationContext(validationContext);");
+            sb.AppendLine($"                      var args = SerializationUtils.DeserializeFromBytes<{dataTypeName}>(data);");
+
+            foreach (var param in parameters)
+            {
+                sb.AppendLine($"                      var {param.Name} = args.{param.Name};");
+            }
+
+            var refParams = string.Join(", ", parameters.Select(p => $"ref {p.Name}"));
+            sb.AppendLine($"                      result = instance.{targetAttr.ValidationMethodName}({refParams});");
+            sb.AppendLine($"                      ");
+            sb.AppendLine($"                      if (result.WasModified)");
+            sb.AppendLine($"                      {{");
+
+            foreach (var param in parameters)
+            {
+                sb.AppendLine($"                          args.{param.Name} = {param.Name};");
+            }
+
+            sb.AppendLine($"                          int bytesUsed;");
+            sb.AppendLine($"                          bool needsReturn;");
+            sb.AppendLine($"                          result.ModifiedData = SerializationUtils.SerializeToBytes(args, out bytesUsed, out needsReturn);");
+            sb.AppendLine($"                      }}");
+            sb.AppendLine($"                      return result;");
+            sb.AppendLine($"                  }}");
+            sb.AppendLine($"                  finally");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      GONetMain.EventBus.ClearValidationContext();");
+            sb.AppendLine($"                  }}");
+            sb.AppendLine($"              }})");
+        }
+
+        private static void GenerateEightParamValidator(StringBuilder sb, Type componentType, MethodInfo method, TargetRpcAttribute targetAttr, ParameterInfo[] parameters)
+        {
+            string dataTypeName = GetParameterDataStructName(method);
+
+            sb.AppendLine($"              (Func<object, ushort, ushort[], int, byte[], RpcValidationResult>)((obj, source, targets, count, data) =>");
+            sb.AppendLine($"              {{");
+            sb.AppendLine($"                  var instance = ({componentType.Name})obj;");
+            sb.AppendLine($"                  var result = RpcValidationResult.CreatePreAllocated(count);");
+            sb.AppendLine($"                  ");
+            sb.AppendLine($"                  var validationContext = new RpcValidationContext");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      SourceAuthorityId = source,");
+            sb.AppendLine($"                      TargetAuthorityIds = targets,");
+            sb.AppendLine($"                      TargetCount = count,");
+            sb.AppendLine($"                      PreAllocatedResult = result");
+            sb.AppendLine($"                  }};");
+            sb.AppendLine($"                  ");
+            sb.AppendLine($"                  try");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      GONetMain.EventBus.SetValidationContext(validationContext);");
+            sb.AppendLine($"                      var args = SerializationUtils.DeserializeFromBytes<{dataTypeName}>(data);");
+
+            foreach (var param in parameters)
+            {
+                sb.AppendLine($"                      var {param.Name} = args.{param.Name};");
+            }
+
+            var refParams = string.Join(", ", parameters.Select(p => $"ref {p.Name}"));
+            sb.AppendLine($"                      result = instance.{targetAttr.ValidationMethodName}({refParams});");
+            sb.AppendLine($"                      ");
+            sb.AppendLine($"                      if (result.WasModified)");
+            sb.AppendLine($"                      {{");
+
+            foreach (var param in parameters)
+            {
+                sb.AppendLine($"                          args.{param.Name} = {param.Name};");
+            }
+
+            sb.AppendLine($"                          int bytesUsed;");
+            sb.AppendLine($"                          bool needsReturn;");
+            sb.AppendLine($"                          result.ModifiedData = SerializationUtils.SerializeToBytes(args, out bytesUsed, out needsReturn);");
+            sb.AppendLine($"                      }}");
+            sb.AppendLine($"                      return result;");
+            sb.AppendLine($"                  }}");
+            sb.AppendLine($"                  finally");
+            sb.AppendLine($"                  {{");
+            sb.AppendLine($"                      GONetMain.EventBus.ClearValidationContext();");
+            sb.AppendLine($"                  }}");
+            sb.AppendLine($"              }})");
+        }
+
+        private static void GenerateRpcHandlerRegistration(StringBuilder sb, MethodInfo method, string className)
+        {
+            // Skip generating handlers for base class methods - they're handled by the base class generator
+            if (method.DeclaringType == typeof(GONetParticipantCompanionBehaviour))
+            {
+                return; // Don't generate handler, just metadata
+            }
+
+            var parameters = method.GetParameters();
+            bool hasParameters = parameters.Length > 0;
+            bool returnsValue = method.ReturnType.IsGenericType && method.ReturnType.GetGenericTypeDefinition() == typeof(Task<>);
+            bool isAsync = typeof(Task).IsAssignableFrom(method.ReturnType);
+
+            // Check if this is a TargetRpc
+            var targetAttr = method.GetCustomAttribute<TargetRpcAttribute>();
+            bool isTargetRpc = targetAttr != null;
+
+            sb.AppendLine($"            eventBus.RegisterRpcHandler({className}_RpcIds.{method.Name}_RpcId, async (envelope) =>");
+            sb.AppendLine("            {");
+            sb.AppendLine("                var rpcEvent = envelope.Event;");
+            sb.AppendLine($"                var gnp = GONetMain.GetGONetParticipantById(rpcEvent.GONetId);");
+            sb.AppendLine($"                var instance = gnp?.GetComponent<{className}>();");
+            sb.AppendLine("                ");
+            sb.AppendLine("                // CRITICAL: If participant exists but component doesn't, throw exception to trigger deferral");
+            sb.AppendLine("                // This handles runtime-added components that receive RPCs before they're initialized");
+            sb.AppendLine("                if (instance == null)");
+            sb.AppendLine("                {");
+            sb.AppendLine("                    if (gnp != null)");
+            sb.AppendLine("                    {");
+            sb.AppendLine("                        throw new GONetEventBus.RpcComponentNotReadyException(rpcEvent.GONetId, rpcEvent.RpcId);");
+            sb.AppendLine("                    }");
+            sb.AppendLine("                    return; // Participant doesn't exist - silently ignore");
+            sb.AppendLine("                }");
+            sb.AppendLine();
+
+            // Add target checking for TargetRpc
+            if (isTargetRpc)
+            {
+                sb.AppendLine("                // NO more route VALIDATION HERE - if we received it, we're a valid target!");
+                sb.AppendLine("                // The server already validated during routing");
+                sb.AppendLine();
+            }
+
+            // Deserialize parameters if needed (and not already done)
+            if (hasParameters)
+            {
+                string dataTypeName = GetParameterDataStructName(method);
+                sb.AppendLine($"                var args = SerializationUtils.DeserializeFromBytes<{dataTypeName}>(rpcEvent.Data);");
+            }
+
+            // Build the method call
+            string argList = hasParameters ?
+                string.Join(", ", parameters.Select(p => $"args.{p.Name}")) :
+                "";
+
+            if (!isAsync)
+            {
+                // Synchronous void method
+                sb.AppendLine($"                instance.{method.Name}({argList});");
+            }
+            else if (returnsValue)
+            {
+                // Async method with return value
+                sb.AppendLine($"                var result = await instance.{method.Name}({argList});");
+                sb.AppendLine();
+                sb.AppendLine("                // Only send response to remote clients, not to server itself");
+                sb.AppendLine("                if (rpcEvent.CorrelationId != 0 && envelope.SourceAuthorityId != GONetMain.MyAuthorityId)");
+                sb.AppendLine("                {");
+                sb.AppendLine("                    int bytesUsed;");
+                sb.AppendLine("                    bool needsReturn;");
+                sb.AppendLine("                    byte[] responseData = SerializationUtils.SerializeToBytes(result, out bytesUsed, out needsReturn);");
+                sb.AppendLine();
+                sb.AppendLine("                    var response = RpcResponseEvent.Borrow();");
+                sb.AppendLine("                    response.OccurredAtElapsedTicks = GONetMain.Time.ElapsedTicks;");
+                sb.AppendLine("                    response.CorrelationId = rpcEvent.CorrelationId;");
+                sb.AppendLine("                    response.Success = true;");
+                sb.AppendLine("                    response.Data = responseData;");
+                sb.AppendLine();
+                sb.AppendLine("                    eventBus.Publish(response, targetClientAuthorityId: envelope.SourceAuthorityId, shouldPublishReliably: true);");
+                sb.AppendLine("                    // Publish auto-returns the event and the data");
+                sb.AppendLine("                }");
+            }
+            else
+            {
+                // Async void/Task method (no return value)
+                sb.AppendLine($"                await instance.{method.Name}({argList});");
+            }
+
+            sb.AppendLine("            });");
+        }
+
+        private static void GenerateParameterDataStruct(StringBuilder sb, MethodInfo method, HashSet<string> processedTypes)
+        {
+            string structName = GetParameterDataStructName(method);
+
+            if (processedTypes.Contains(structName))
+            {
+                return;
+            }
+            processedTypes.Add(structName);
+
+            var parameters = method.GetParameters();
+
+            sb.AppendLine("    [MemoryPackable]");
+            sb.AppendLine($"    public partial struct {structName}");
+            sb.AppendLine("    {");
+
+            foreach (var param in parameters)
+            {
+                string typeName = GetFriendlyTypeName(param.ParameterType);
+                sb.AppendLine($"        public {typeName} {param.Name} {{ get; set; }}");
+            }
+
+            sb.AppendLine("    }");
+            sb.AppendLine();
+        }
+
+        private static string GetParameterDataStructName(MethodInfo method)
+        {
+            // Use simple type name (without namespace) to create valid C# struct names.
+            // The generated structs are declared within the same namespace as the component,
+            // so type resolution works correctly without needing the full namespace prefix.
+            // This allows RPC classes to exist in namespaces (e.g., GONet.GONetGlobal).
+            return $"{method.DeclaringType.Name}_{method.Name}_RpcData";
+        }
+
+        private static string GetFriendlyTypeName(Type type)
+        {
+            if (type.IsGenericType)
+            {
+                string genericTypeName = type.GetGenericTypeDefinition().FullName;
+                genericTypeName = genericTypeName.Substring(0, genericTypeName.IndexOf('`'));
+                string genericArgs = string.Join(", ", type.GetGenericArguments().Select(GetFriendlyTypeName));
+                return $"{genericTypeName}<{genericArgs}>".Replace('+', '.');
+            }
+
+            return type.FullName.Replace('+', '.');
+        }
+
+        private static void GenerateDispatcherMethods(StringBuilder sb, Type componentType, IEnumerable<MethodInfo> rpcMethods)
+        {
+            // Group methods by parameter count
+            var methodsByParamCount = rpcMethods.GroupBy(m => m.GetParameters().Length).ToDictionary(g => g.Key, g => g.ToList());
+
+            // Generate synchronous Dispatch methods (existing)
+            for (int paramCount = 0; paramCount <= 8; paramCount++)
+            {
+                GenerateSyncDispatchMethod(sb, componentType, methodsByParamCount, paramCount);
+            }
+
+            // Generate async DispatchAsync methods (new)
+            for (int paramCount = 0; paramCount <= 8; paramCount++)
+            {
+                GenerateAsyncDispatchMethod(sb, componentType, methodsByParamCount, paramCount);
+            }
+        }
+
+        private static void GenerateSyncDispatchMethod(StringBuilder sb, Type componentType, Dictionary<int, List<MethodInfo>> methodsByParamCount, int paramCount)
+        {
+            // Generate method signature
+            var genericParams = paramCount > 0 ?
+                $"<{string.Join(", ", Enumerable.Range(1, paramCount).Select(i => $"T{i}"))}>" : "";
+            var methodParams = paramCount > 0 ?
+                string.Join(", ", Enumerable.Range(1, paramCount).Select(i => $"T{i} arg{i}")) : "";
+            var commaMethodParams = paramCount > 0 ? $", {methodParams}" : "";
+
+            sb.AppendLine($"        public void Dispatch{paramCount}{genericParams}(object instance, string methodName{commaMethodParams})");
+            sb.AppendLine("        {");
+
+            if (methodsByParamCount.ContainsKey(paramCount))
+            {
+                sb.AppendLine($"            var typed = ({componentType.FullName})instance;");
+                sb.AppendLine("            switch (methodName)");
+                sb.AppendLine("            {");
+
+                foreach (var method in methodsByParamCount[paramCount])
+                {
+                    var parameters = method.GetParameters();
+                    sb.AppendLine($"                case {method.Name.ToUpper()}:");
+
+                    var args = string.Join(", ", parameters.Select((p, i) => $"({GetFriendlyTypeName(p.ParameterType)})(object)arg{i + 1}"));
+                    if (method.ReturnType == typeof(void))
+                    {
+                        sb.AppendLine($"                    typed.{method.Name}({args});");
+                    }
+                    else if (method.ReturnType == typeof(Task))
+                    {
+                        // For async Task methods (including TargetRpc), we need to handle them properly
+                        sb.AppendLine($"                    _ = typed.{method.Name}({args});"); // Fire and forget
+                    }
+                    sb.AppendLine("                    break;");
+                }
+
+                sb.AppendLine("            }");
+            }
+
+            sb.AppendLine("        }");
+            sb.AppendLine();
+        }
+
+        private static void GenerateAsyncDispatchMethod(StringBuilder sb, Type componentType, Dictionary<int, List<MethodInfo>> methodsByParamCount, int paramCount)
+        {
+            // Generate method signature with TResult
+            var genericParams = paramCount > 0 ?
+                $"<TResult, {string.Join(", ", Enumerable.Range(1, paramCount).Select(i => $"T{i}"))}>" :
+                "<TResult>";
+            var methodParams = paramCount > 0 ?
+                string.Join(", ", Enumerable.Range(1, paramCount).Select(i => $"T{i} arg{i}")) : "";
+            var commaMethodParams = paramCount > 0 ? $", {methodParams}" : "";
+
+            sb.AppendLine($"        public async Task<TResult> DispatchAsync{paramCount}{genericParams}(object instance, string methodName{commaMethodParams})");
+            sb.AppendLine("        {");
+
+            if (methodsByParamCount.ContainsKey(paramCount))
+            {
+                // Only include async methods that return Task<T>
+                var asyncMethods = methodsByParamCount[paramCount]
+                    .Where(m => m.ReturnType.IsGenericType &&
+                               m.ReturnType.GetGenericTypeDefinition() == typeof(Task<>))
+                    .ToList();
+
+                if (asyncMethods.Any())
+                {
+                    sb.AppendLine($"            var typed = ({componentType.FullName})instance;");
+                    sb.AppendLine("            switch (methodName)");
+                    sb.AppendLine("            {");
+
+                    foreach (var method in asyncMethods)
+                    {
+                        var parameters = method.GetParameters();
+                        sb.AppendLine($"                case {method.Name.ToUpper()}:");
+
+                        var args = parameters.Length > 0 ?
+                            string.Join(", ", parameters.Select((p, i) => $"({GetFriendlyTypeName(p.ParameterType)})(object)arg{i + 1}")) :
+                            "";
+
+                        // Double cast through object to handle the generic return
+                        sb.AppendLine($"                    return (TResult)(object)await typed.{method.Name}({args});");
+                    }
+
+                    sb.AppendLine("                default:");
+                    sb.AppendLine("                    return default(TResult);");
+                    sb.AppendLine("            }");
+                }
+                else
+                {
+                    sb.AppendLine("            return default(TResult);");
+                }
+            }
+            else
+            {
+                sb.AppendLine("            return default(TResult);");
+            }
+
+            sb.AppendLine("        }");
+            sb.AppendLine();
+        }
+
+        private static void ValidateRpcMethod(Type componentType, MethodInfo method, List<string> errors, bool isOnGONetGlobal, bool isOnGONetLocal)
+        {
+            var attr = method.GetCustomAttribute<GONetRpcAttribute>();
+            string methodId = $"{method.DeclaringType.FullName}.{method.Name}()";
+
+            // Return type validation
+            Type returnType = method.ReturnType;
+            bool isVoid = returnType == typeof(void);
+            bool isTask = returnType == typeof(Task);
+            bool isGenericTask = returnType.IsGenericType &&
+                                 returnType.GetGenericTypeDefinition() == typeof(Task<>);
+
+            if (attr is ServerRpcAttribute)
+            {
+                if (!isVoid && !isTask && !isGenericTask)
+                {
+                    errors.Add($"ERROR: {methodId} - ServerRpc must return void, Task, or Task<T>");
+                    errors.Add($"  Current: {returnType.FullName}");
+                    errors.Add($"  FIX: Change to one of:");
+                    errors.Add($"    - void {method.Name}(...) for fire-and-forget");
+                    errors.Add($"    - async Task {method.Name}(...) for async without return");
+                    errors.Add($"    - async Task<YourType> {method.Name}(...) for request-response");
+                }
+            }
+            else if (attr is ClientRpcAttribute || attr is TargetRpcAttribute)
+            {
+                // Check for allowed return types
+                bool isValidReturn = isVoid || isTask;
+
+                // TargetRpc can also return Task<RpcDeliveryReport> for delivery confirmation
+                if (attr is TargetRpcAttribute && returnType.IsGenericType &&
+                    returnType.GetGenericTypeDefinition() == typeof(Task<>) &&
+                    returnType.GetGenericArguments()[0] == typeof(RpcDeliveryReport))
+                {
+                    isValidReturn = true;
+                }
+
+                if (!isValidReturn)
+                {
+                    errors.Add($"ERROR: {methodId} - {attr.GetType().FullName} must return void, Task, or Task<RpcDeliveryReport> (TargetRpc only)");
+                    errors.Add($"  Current: {returnType.FullName}");
+                    errors.Add($"  FIX: Change return type appropriately");
+                }
+            }
+
+            // Async validation
+            if (isGenericTask || isTask)
+            {
+                bool hasAsyncModifier = method.GetCustomAttribute<System.Runtime.CompilerServices.AsyncStateMachineAttribute>() != null;
+                if (!hasAsyncModifier)
+                {
+                    errors.Add($"WARNING: {methodId} returns Task but missing 'async' modifier");
+                    errors.Add($"  FIX: Add 'async' keyword: async {returnType.FullName} {method.Name}(...)");
+                }
+            }
+
+            // Parameter validation
+            foreach (var param in method.GetParameters())
+            {
+                // GONetRpcContext must not be a parameter anymore
+                if (param.ParameterType == typeof(GONetRpcContext))
+                {
+                    errors.Add($"ERROR: {methodId} - GONetRpcContext cannot be a method parameter");
+                    errors.Add($"  FIX: Remove the GONetRpcContext parameter and access it via GONetEventBus.CurrentRpcContext instead:");
+                    errors.Add($"  var context = GONetEventBus.CurrentRpcContext;");
+                    continue;
+                }
+
+                if (!IsMemoryPackable(param.ParameterType))
+                {
+                    errors.Add($"ERROR: {methodId} parameter '{param.Name}' type '{param.ParameterType.FullName}' not serializable");
+                    errors.Add($"  FIX: Add [MemoryPackable] attribute to '{param.ParameterType.FullName}'");
+                    errors.Add($"  FIX: Make the class/struct partial: 'public partial class {param.ParameterType.FullName}'");
+                }
+
+                if (param.IsOut || param.ParameterType.IsByRef)
+                {
+                    errors.Add($"ERROR: {methodId} - RPC cannot have ref/out parameters");
+                    errors.Add($"  Parameter: {param.Name}");
+                    errors.Add($"  FIX: Use return values or separate RPCs instead");
+                }
+            }
+
+            // Context-specific validation
+            if (attr.IsMineRequired)
+            {
+                if (isOnGONetGlobal)
+                {
+                    errors.Add($"WARNING: {methodId} has IsMineRequired=true but is on GONetGlobal GameObject");
+                    errors.Add($"  GONetGlobal is shared by all - IsMine checks may not make sense");
+                    errors.Add($"  CONSIDER: Set [ServerRpc(IsMineRequired = false)] for global operations");
+                }
+            }
+
+            if (attr is TargetRpcAttribute targetRpc)
+            {
+                if (isOnGONetGlobal && targetRpc.Target == RpcTarget.Owner)
+                {
+                    errors.Add($"ERROR: {methodId} targets 'Owner' but is on GONetGlobal");
+                    errors.Add($"  GONetGlobal doesn't have an individual owner");
+                    errors.Add($"  FIX: Use RpcTarget.All or move this RPC to GONetLocal/instance");
+                }
+
+                if (!string.IsNullOrEmpty(targetRpc.TargetPropertyName))
+                {
+                    var property = componentType.GetProperty(targetRpc.TargetPropertyName);
+                    bool isListOrArray = property?.PropertyType == typeof(List<ushort>) ||
+                                        property?.PropertyType == typeof(ushort[]);
+
+                    if (isListOrArray && !targetRpc.IsMultipleTargets)
+                    {
+                        errors.Add($"ERROR: {methodId} - TargetPropertyName '{targetRpc.TargetPropertyName}' is a collection but isMultipleTargets is false");
+                    }
+                    else if (!isListOrArray && targetRpc.IsMultipleTargets)
+                    {
+                        errors.Add($"ERROR: {methodId} - TargetPropertyName '{targetRpc.TargetPropertyName}' is not a collection but isMultipleTargets is true");
+                    }
+                }
+            }
+
+            // Enhanced validation for TargetRpc with validation method
+            var targetAttr = method.GetCustomAttribute<TargetRpcAttribute>();
+            if (targetAttr != null && !string.IsNullOrEmpty(targetAttr.ValidationMethodName))
+            {
+                var validationMethod = method.DeclaringType.GetMethod(targetAttr.ValidationMethodName,
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+                if (validationMethod == null)
+                {
+                    errors.Add($"ERROR: {methodId} - Validation method '{targetAttr.ValidationMethodName}' not found");
+                    errors.Add($"  FIX: Add method: internal RpcValidationResult {targetAttr.ValidationMethodName}(...)");
+
+                    // Provide signature example
+                    var rpcParams = method.GetParameters();
+                    if (rpcParams.Length == 0)
+                    {
+                        errors.Add($"  Expected signature: internal RpcValidationResult {targetAttr.ValidationMethodName}()");
+                    }
+                    else
+                    {
+                        var paramList = string.Join(", ", rpcParams.Select(p => $"ref {p.ParameterType.Name} {p.Name}"));
+                        errors.Add($"  Expected signature: internal RpcValidationResult {targetAttr.ValidationMethodName}({paramList})");
+                    }
+                }
+                else
+                {
+                    // Check if this is an async validator (Task<RpcValidationResult>) or sync (RpcValidationResult)
+                    bool isAsyncValidator = validationMethod.ReturnType.IsGenericType &&
+                                           validationMethod.ReturnType.GetGenericTypeDefinition() == typeof(Task<>) &&
+                                           validationMethod.ReturnType.GetGenericArguments()[0] == typeof(RpcValidationResult);
+                    bool isSyncValidator = validationMethod.ReturnType == typeof(RpcValidationResult);
+
+                    if (!isAsyncValidator && !isSyncValidator)
+                    {
+                        errors.Add($"ERROR: {methodId} - Validation method '{targetAttr.ValidationMethodName}' must return RpcValidationResult or Task<RpcValidationResult>");
+                        errors.Add($"  Current return type: {validationMethod.ReturnType.Name}");
+                        errors.Add($"  FIX (sync): internal RpcValidationResult {targetAttr.ValidationMethodName}(ref T1 param1, ref T2 param2, ...)");
+                        errors.Add($"  FIX (async): internal async Task<RpcValidationResult> {targetAttr.ValidationMethodName}Async(T1 param1, T2 param2, ...) // NO ref");
+                    }
+
+                    // Check parameters match
+                    var rpcParams = method.GetParameters();
+                    var validationParams = validationMethod.GetParameters();
+
+                    if (rpcParams.Length != validationParams.Length)
+                    {
+                        errors.Add($"ERROR: {methodId} - Validation method parameter count mismatch");
+                        errors.Add($"  RPC has {rpcParams.Length} parameters");
+                        errors.Add($"  Validation method has {validationParams.Length} parameters");
+                        if (isSyncValidator)
+                        {
+                            errors.Add($"  FIX (sync): Validation method must have the same parameters as the RPC, but passed by ref");
+                        }
+                        else if (isAsyncValidator)
+                        {
+                            errors.Add($"  FIX (async): Validation method must have the same parameters as the RPC, WITHOUT ref (C# async limitation)");
+                        }
+                    }
+                    else
+                    {
+                        bool hasParameterErrors = false;
+                        for (int i = 0; i < rpcParams.Length; i++)
+                        {
+                            var rpcParam = rpcParams[i];
+                            var valParam = validationParams[i];
+
+                            if (isSyncValidator)
+                            {
+                                // SYNC validators: require 'ref' keyword
+                                if (!valParam.ParameterType.IsByRef)
+                                {
+                                    errors.Add($"ERROR: {methodId} - SYNC validation parameter '{valParam.Name}' at position {i} must be passed by ref");
+                                    errors.Add($"  Current: {valParam.ParameterType.Name} {valParam.Name}");
+                                    errors.Add($"  FIX: ref {rpcParam.ParameterType.Name} {valParam.Name}");
+                                    errors.Add($"  OR: Convert to async validator (Task<RpcValidationResult> with NO ref parameters)");
+                                    hasParameterErrors = true;
+                                    continue;
+                                }
+
+                                // Check type matches (accounting for ref)
+                                var valParamType = valParam.ParameterType.GetElementType();
+                                if (valParamType != rpcParam.ParameterType)
+                                {
+                                    errors.Add($"ERROR: {methodId} - Validation parameter type mismatch at position {i}");
+                                    errors.Add($"  RPC parameter: {rpcParam.ParameterType.Name} {rpcParam.Name}");
+                                    errors.Add($"  Validation parameter: {valParamType.Name} {valParam.Name}");
+                                    errors.Add($"  FIX: ref {rpcParam.ParameterType.Name} {valParam.Name}");
+                                    hasParameterErrors = true;
+                                }
+                            }
+                            else if (isAsyncValidator)
+                            {
+                                // ASYNC validators: MUST NOT have 'ref' keyword (C# limitation)
+                                if (valParam.ParameterType.IsByRef)
+                                {
+                                    errors.Add($"ERROR: {methodId} - ASYNC validation parameter '{valParam.Name}' at position {i} CANNOT use ref keyword");
+                                    errors.Add($"  C# does not allow ref parameters in async methods");
+                                    errors.Add($"  Current: ref {valParam.ParameterType.GetElementType().Name} {valParam.Name}");
+                                    errors.Add($"  FIX: {rpcParam.ParameterType.Name} {valParam.Name} // Remove 'ref'");
+                                    errors.Add($"  To modify parameters, use: result.SetValidatedOverride(index, newValue)");
+                                    hasParameterErrors = true;
+                                    continue;
+                                }
+
+                                // Check type matches (no ref, so direct comparison)
+                                if (valParam.ParameterType != rpcParam.ParameterType)
+                                {
+                                    errors.Add($"ERROR: {methodId} - Async validation parameter type mismatch at position {i}");
+                                    errors.Add($"  RPC parameter: {rpcParam.ParameterType.Name} {rpcParam.Name}");
+                                    errors.Add($"  Validation parameter: {valParam.ParameterType.Name} {valParam.Name}");
+                                    errors.Add($"  FIX: {rpcParam.ParameterType.Name} {valParam.Name}");
+                                    hasParameterErrors = true;
+                                }
+                            }
+
+                            // Warn about name mismatch (applies to both sync and async)
+                            if (valParam.Name != rpcParam.Name)
+                            {
+                                errors.Add($"WARNING: {methodId} - Parameter name mismatch at position {i}");
+                                errors.Add($"  RPC parameter name: {rpcParam.Name}");
+                                errors.Add($"  Validation parameter name: {valParam.Name}");
+                                errors.Add($"  RECOMMENDED: Use matching names for clarity (especially important for async validators using SetValidatedOverride by index)");
+                            }
+                        }
+
+                        if (!hasParameterErrors)
+                        {
+                            // Valid signature - provide usage example
+                            GONetLog.Debug($"Valid validation method found: {targetAttr.ValidationMethodName}");
+                        }
+                    }
+                }
+            }
+
+            // Check for property/target mismatch
+            if (targetAttr != null && !string.IsNullOrEmpty(targetAttr.TargetPropertyName))
+            {
+                var property = method.DeclaringType.GetProperty(targetAttr.TargetPropertyName,
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+                if (property == null)
+                {
+                    errors.Add($"ERROR: {methodId} - Target property '{targetAttr.TargetPropertyName}' not found");
+                }
+                else
+                {
+                    bool isListOrArray = property.PropertyType == typeof(List<ushort>) ||
+                                        property.PropertyType == typeof(ushort[]);
+
+                    if (isListOrArray && !targetAttr.IsMultipleTargets)
+                    {
+                        errors.Add($"ERROR: {methodId} - Property '{targetAttr.TargetPropertyName}' is a collection but isMultipleTargets is false");
+                        errors.Add($"  FIX: Set isMultipleTargets: true in the TargetRpc attribute");
+                    }
+                    else if (!isListOrArray && targetAttr.IsMultipleTargets)
+                    {
+                        errors.Add($"ERROR: {methodId} - Property '{targetAttr.TargetPropertyName}' is not a collection but isMultipleTargets is true");
+                        errors.Add($"  Property type: {property.PropertyType.Name}");
+                        errors.Add($"  FIX: Either use List<ushort> or ushort[] for the property, or set isMultipleTargets: false");
+                    }
+                    else if (!isListOrArray && property.PropertyType != typeof(ushort))
+                    {
+                        errors.Add($"ERROR: {methodId} - Target property must be ushort, List<ushort>, or ushort[]");
+                        errors.Add($"  Current type: {property.PropertyType.Name}");
+                    }
+                }
+            }
+        }
+
+        private static bool IsMemoryPackable(Type type)
+        {
+            if (type.GetCustomAttribute<MemoryPackableAttribute>() != null)
+                return true;
+
+            if (type.IsPrimitive ||
+                type == typeof(string) ||
+                type == typeof(Vector3) ||
+                type == typeof(Vector2) ||
+                type == typeof(Quaternion) ||
+                type.IsEnum)
+                return true;
+
+            if (type.IsArray)
+                return IsMemoryPackable(type.GetElementType());
+
+            if (type.IsGenericType)
+            {
+                var genericDef = type.GetGenericTypeDefinition();
+                if (genericDef == typeof(List<>) || genericDef == typeof(Dictionary<,>))
+                {
+                    return type.GetGenericArguments().All(IsMemoryPackable);
+                }
+            }
+
+            return false;
+        }
+        #endregion
     }
 
     /// <summary>
@@ -1501,7 +3707,7 @@ namespace GONet.Generation
 
             if (!string.IsNullOrWhiteSpace(attribute.SettingsProfileTemplateName))
             {
-                GONetAutoMagicalSyncSettings_ProfileTemplate profile = Resources.Load<GONetAutoMagicalSyncSettings_ProfileTemplate>(string.Format(SYNC_PROFILE_RESOURCES_FOLDER_FORMATSKI, attribute.SettingsProfileTemplateName).Replace(".asset", string.Empty));
+                GONetAutoMagicalSyncSettings_ProfileTemplate profile = LoadProfileAsset(attribute.SettingsProfileTemplateName);
 
                 if (profile == null)
                 {
@@ -1509,7 +3715,7 @@ namespace GONet.Generation
                     const string DEFAULT = ".  We will use the default profile/template instead (creating it if we have to).";
                     GONetLog.Warning(string.Concat(UNABLE, attribute.SettingsProfileTemplateName, DEFAULT));
 
-                    var defaultProfile = Resources.Load<GONetAutoMagicalSyncSettings_ProfileTemplate>(string.Format(SYNC_PROFILE_RESOURCES_FOLDER_FORMATSKI, GONetAutoMagicalSyncAttribute.PROFILE_TEMPLATE_NAME___DEFAULT).Replace(".asset", string.Empty));
+                    var defaultProfile = LoadProfileAsset(GONetAutoMagicalSyncAttribute.PROFILE_TEMPLATE_NAME___DEFAULT);
 
                     if (defaultProfile == null)
                     {
@@ -1539,6 +3745,9 @@ namespace GONet.Generation
                     profile = defaultProfile;
                 }
 
+
+
+
                 attribute.MustRunOnUnityMainThread = profile.MustRunOnUnityMainThread;
                 attribute.ProcessingPriority = profile.ProcessingPriority;
                 attribute.QuantizeDownToBitCount = profile.QuantizeDownToBitCount;
@@ -1547,6 +3756,19 @@ namespace GONet.Generation
                 attribute.Reliability = profile.SendViaReliability;
                 attribute.ShouldBlendBetweenValuesReceived = profile.ShouldBlendBetweenValuesReceived;
                 attribute.ShouldSkipSync_RegistrationId = (int)profile.ShouldSkipSyncRegistrationId;
+                attribute.PhysicsUpdateInterval = profile.PhysicsUpdateInterval;
+                attribute.EnablePhysicsSnapping = profile.EnablePhysicsSnapping;
+                // DEBUG: Log profile application
+                UnityEngine.Debug.Log($"[ProfileApply] memberName={memberName}, profileName={attribute.SettingsProfileTemplateName}, PhysicsUpdateInterval={attribute.PhysicsUpdateInterval}, syncChangesEverySeconds={attribute.SyncChangesEverySeconds}");
+
+
+                // VELOCITY-AUGMENTED SYNC: Copy velocity quantization settings from profile to attribute
+                attribute.IsVelocityEligible = profile.IsVelocityEligible;
+                attribute.AutoCalculateVelocityQuantization = profile.AutoCalculateVelocityQuantization;
+                attribute.VelocityQuantizeLowerBound = profile.VelocityQuantizeLowerBound;
+                attribute.VelocityQuantizeUpperBound = profile.VelocityQuantizeUpperBound;
+                attribute.VelocityQuantizeDownToBitCount = profile.VelocityQuantizeDownToBitCount;
+                attribute.VelocityAnchorIntervalSeconds = profile.VelocityAnchorIntervalSeconds;
 
                 float syncEverySeconds = 0;
                 if (profile.SyncChangesFrequencyOccurrences > 0)
@@ -1637,6 +3859,38 @@ namespace GONet.Generation
             { typeof(Vector2), GONetSyncableValueTypes.UnityEngine_Vector2 },
             { typeof(Vector4), GONetSyncableValueTypes.UnityEngine_Vector4 },
         };
+
+        /// <summary>
+        /// Loads a sync profile asset using AssetDatabase (editor-time reliable) with fallback to Resources.Load.
+        /// CRITICAL: Resources.Load() can fail during code generation in the Editor, so we use AssetDatabase.LoadAssetAtPath as primary method.
+        /// </summary>
+        private static GONetAutoMagicalSyncSettings_ProfileTemplate LoadProfileAsset(string profileName)
+        {
+            // CRITICAL: Use AssetDatabase for reliable editor-time loading (Resources.Load can fail during code generation)
+            string assetPath = $"Assets/GONet/Resources/GONet/SyncSettingsProfiles/{profileName}.asset";
+            GONetAutoMagicalSyncSettings_ProfileTemplate profile = UnityEditor.AssetDatabase.LoadAssetAtPath<GONetAutoMagicalSyncSettings_ProfileTemplate>(assetPath);
+            
+            if (profile != null)
+            {
+                UnityEngine.Debug.Log($"[ProfileLoad] SUCCESS via AssetDatabase: {profileName} at {assetPath}, PhysicsUpdateInterval={profile.PhysicsUpdateInterval}");
+                return profile;
+            }
+            
+            // Fallback to Resources.Load (shouldn't be needed, but provides redundancy)
+            string resourcesPath = string.Format(SYNC_PROFILE_RESOURCES_FOLDER_FORMATSKI, profileName).Replace(".asset", string.Empty);
+            profile = Resources.Load<GONetAutoMagicalSyncSettings_ProfileTemplate>(resourcesPath);
+            
+            if (profile != null)
+            {
+                UnityEngine.Debug.LogWarning($"[ProfileLoad] Loaded via Resources.Load fallback: {profileName}, PhysicsUpdateInterval={profile.PhysicsUpdateInterval}");
+            }
+            else
+            {
+                UnityEngine.Debug.LogError($"[ProfileLoad] FAILED to load profile via both AssetDatabase and Resources: {profileName}");
+            }
+            
+            return profile;
+        }
 
         public const string SYNC_PROFILE_RESOURCES_FOLDER_FORMATSKI = "GONet/SyncSettingsProfiles/{0}.asset";
     }
@@ -1792,6 +4046,14 @@ namespace GONet.Generation
                     for (int iSyncMember = 0; iSyncMember < syncMemberCount; ++iSyncMember)
                     {
                         MemberInfo syncMember = syncMembers.ElementAt(iSyncMember);
+
+                        // VALIDATION: Check if the member type is supported for automatic sync
+                        Type syncMemberType = syncMember.MemberType == MemberTypes.Property
+                            ? ((PropertyInfo)syncMember).PropertyType
+                            : ((FieldInfo)syncMember).FieldType;
+
+                        GONetParticipant_AutoMagicalSyncCompanion_Generated_Generator.ValidateAutoMagicalSyncMemberType(syncMemberType, syncMember.Name, component.GetType());
+
                         var singleMember = new GONetParticipant_ComponentsWithAutoSyncMembers_SingleMember(syncMember);
                         componentAutoSyncMembers.AddLast(singleMember);
 

@@ -19,7 +19,7 @@ public class GONetInitializer : MonoBehaviour
         GONetGlobal.ServerIPAddress_Actual = GONetGlobal.ServerIPAddress_Default;
         GONetGlobal.ServerPort_Actual = GONetGlobal.ServerPort_Default;
 
-        GONetMain.GONetClient = new GONetClient(new NetcodeIO.NET.Client());
+        GONetMain.GONetClient = new GONetClient();
         GONetMain.GONetClient.ConnectToServer(GONetGlobal.ServerIPAddress_Actual, GONetGlobal.ServerPort_Actual, 30);
     }
 
@@ -37,7 +37,7 @@ public class GONetInitializer : MonoBehaviour
         GONetGlobal.ServerIPAddress_Actual = GONetGlobal.ServerIPAddress_Default;
         GONetGlobal.ServerPort_Actual = GONetGlobal.ServerPort_Default;
 
-        GONetMain.gonetServer = new GONetServer(10, GONetGlobal.ServerIPAddress_Actual, GONetGlobal.ServerPort_Actual);
+        GONetMain.gonetServer = new GONetServer(10, GONetGlobal.ServerPort_Actual);
         GONetMain.gonetServer.Start();
     }
 

@@ -1,4 +1,4 @@
-﻿/* GONet (TM, serial number 88592370), Copyright (c) 2019-2023 Galore Interactive LLC - All Rights Reserved
+/* GONet (TM, serial number 88592370), Copyright (c) 2019-2023 Galore Interactive LLC - All Rights Reserved
  * Unauthorized copying of this file, via any medium is strictly prohibited
  * Proprietary and confidential, email: contactus@galoreinteractive.com
  * 
@@ -145,11 +145,116 @@ namespace GONet
         /// Only used/applied when <see cref="QuantizeDownToBitCount"/> greater than 0.
         ///
         /// This is the known/expected lowest value possible.
-        /// IMPORTANT: 
+        /// IMPORTANT:
         /// PRE: Must be less than <see cref="QuantizeUpperBound"/>.
         /// </summary>
         public float QuantizeLowerBound = float.MinValue / 2f;
         public float QuantizeUpperBound = float.MaxValue / 2f;
+
+        /// <summary>
+        /// SERVER PHYSICS SYNC ONLY: How often to sync physics state (position/rotation from Rigidbody) for objects using this profile.
+        /// Only applies to GONetParticipants with Rigidbody components and IsRigidBodyOwnerOnlyControlled enabled.
+        ///
+        /// Value of 1 = sync every FixedUpdate (60 Hz at 0.0167s timestep)
+        /// Value of 2 = sync every 2nd FixedUpdate (30 Hz)
+        /// Value of 3 = sync every 3rd FixedUpdate (20 Hz)
+        /// Value of 4 = sync every 4th FixedUpdate (15 Hz)
+        ///
+        /// PERFORMANCE: Higher values reduce bandwidth and CPU overhead but increase interpolation lag on clients.
+        /// RECOMMENDED: 1 for fast-moving objects (projectiles), 2-3 for normal physics objects, 4 for slow/static objects.
+        /// </summary>
+        public int PhysicsUpdateInterval = 1;
+
+        /// <summary>
+        /// EXPERIMENTAL CLIENT PHYSICS SNAP: Enable physics-based precision snapping for at-rest objects.
+        /// Default: false (Stage 2 smart at-rest value selection is preferred).
+        ///
+        /// Only applies to physics objects (IsRigidBodyOwnerOnlyControlled=true) on non-authority clients.
+        /// When enabled, temporarily enables physics for ONE FixedUpdate to snap objects from quantized
+        /// positions (~0.95mm error) to sub-millimeter precision using Unity's collision resolver.
+        ///
+        /// NOTE: Copied from profile template's EnablePhysicsSnapping field.
+        /// </summary>
+        public bool EnablePhysicsSnapping = false;
+
+        /// <summary>
+        /// VELOCITY-AUGMENTED SYNC: Indicates if this value is eligible for velocity-augmented synchronization.
+        /// Automatically set to true for Vector3 and Quaternion types when velocity quantization is configured.
+        /// When true, system alternates between sending VALUE (position) and VELOCITY (rate of change) bundles
+        /// to eliminate sub-quantization jitter on receivers through position synthesis.
+        /// </summary>
+        public bool IsVelocityEligible = false;
+
+        /// <summary>
+        /// VELOCITY-AUGMENTED SYNC: Lower bound for velocity quantization (rate of change per second).
+        /// Only used when QuantizeDownToBitCount > 0 and IsVelocityEligible = true.
+        /// Values outside [VelocityQuantizeLowerBound, VelocityQuantizeUpperBound] will fall back to VALUE bundles.
+        /// Units: value-units/second (e.g., meters/second for Vector3, radians/second for Quaternion)
+        /// Default: -20
+        /// NOTE: Internally converted to value-units-per-sync-interval for efficient runtime checks.
+        /// </summary>
+        public float VelocityQuantizeLowerBound = -20f;
+
+        /// <summary>
+        /// VELOCITY-AUGMENTED SYNC: Upper bound for velocity quantization (rate of change per second).
+        /// Only used when QuantizeDownToBitCount > 0 and IsVelocityEligible = true.
+        /// Values outside [VelocityQuantizeLowerBound, VelocityQuantizeUpperBound] will fall back to VALUE bundles.
+        /// Units: value-units/second (e.g., meters/second for Vector3, radians/second for Quaternion)
+        /// Default: 20
+        /// NOTE: Internally converted to value-units-per-sync-interval for efficient runtime checks.
+        /// </summary>
+        public float VelocityQuantizeUpperBound = 20f;
+
+        /// <summary>
+        /// VELOCITY-AUGMENTED SYNC: Bit count for velocity quantization (separate from position quantization).
+        /// Only used when IsVelocityEligible = true.
+        /// Higher values = better precision but more bandwidth.
+        /// Default: 10 bits (1024 discrete values across velocity range)
+        /// </summary>
+        public byte VelocityQuantizeDownToBitCount = 10;
+
+        /// <summary>
+        /// VELOCITY-AUGMENTED SYNC: Interval (in seconds) between mandatory VALUE anchor bundles.
+        /// Prevents drift accumulation from packet loss during VELOCITY-augmented sync.
+        /// Only used when IsVelocityEligible = true.
+        ///
+        /// CONFIGURATION:
+        /// - 0 (default): Use global setting from GONetGlobal.velocityAnchorIntervalSeconds
+        /// - >0: Custom interval for this specific sync value (overrides global)
+        ///
+        /// HOW IT WORKS:
+        /// - Values within velocity range → VELOCITY bundles (smooth extrapolation)
+        /// - Every N seconds → Force VALUE anchor (re-sync to server truth)
+        /// - Values exceeding velocity range → Automatic VALUE bundles
+        ///
+        /// TUNING:
+        /// - Lower (0.5s): Less drift, more frequent corrections
+        /// - Higher (2-5s): Maximum smoothness, tolerate more drift
+        ///
+        /// Default: 0 (use global setting)
+        /// </summary>
+        public float VelocityAnchorIntervalSeconds = 0f;
+
+        /// <summary>
+        /// VELOCITY-AUGMENTED SYNC: If true, velocity quantization bounds are calculated automatically
+        /// from VALUE quantization settings (QuantizeDownToBitCount, QuantizeLowerBound, QuantizeUpperBound).
+        /// If false, uses manually configured VelocityQuantize* settings above.
+        ///
+        /// AUTO-CALCULATION (default, recommended):
+        /// - Calculates velocity bounds from VALUE precision / sync interval
+        /// - Ensures VELOCITY bundles are sent only for sub-quantization motion
+        /// - Bit count matches VALUE bit count for consistency
+        /// - VelocityQuantize* fields are IGNORED when this is true
+        ///
+        /// MANUAL CONFIGURATION (advanced):
+        /// - Set to false to use custom VelocityQuantize* settings
+        /// - Useful for fine-tuning bandwidth vs quality trade-offs
+        /// - Requires understanding of quantization math
+        ///
+        /// Default: true (auto-calculate)
+        /// </summary>
+        public bool AutoCalculateVelocityQuantization = true;
+
 
         #region GONet internal only
 

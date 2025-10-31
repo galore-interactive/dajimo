@@ -21,6 +21,7 @@ using GONet.Utils;
 using NetcodeIO.NET;
 
 using GONetChannelId = System.Byte;
+using System.Net;
 
 namespace GONet
 {
@@ -38,6 +39,13 @@ namespace GONet
         readonly ConcurrentQueue<RemoteClient> newlyConnectedClients = new ConcurrentQueue<RemoteClient>();
         readonly ConcurrentQueue<RemoteClient> newlyDisconnectedClients = new ConcurrentQueue<RemoteClient>();
 
+        /// <summary>
+        /// PHASE 2 FIX: Round-robin starting index for client processing fairness.
+        /// Prevents "last client penalty" where clients processed later in list experience cumulative processing delay.
+        /// Rotates each broadcast cycle to ensure all clients get "first" position equally over time.
+        /// </summary>
+        public int nextClientProcessingStartIndex = 0;
+
         public delegate void ClientActionDelegate(GONetConnection_ServerToClient gonetConnection_ServerToClient);
         /// <summary>
         /// This *will* be called from main Unity thread.
@@ -51,11 +59,11 @@ namespace GONet
         /// </summary>
         public event ClientActionDelegate ClientDisconnected;
 
-        public GONetServer(int maxClientCount, string address, int port)
+        public GONetServer(int maxClientCount, int port)
         {
             MaxClientCount = maxClientCount;
 
-            server = new Server(maxClientCount, address, port, GONetMain.noIdeaWhatThisShouldBe_CopiedFromTheirUnitTest, GONetMain._privateKey);
+            server = new Server(maxClientCount, port, GONetMain.noIdeaWhatThisShouldBe_CopiedFromTheirUnitTest, GONetMain._privateKey);
 
             remoteClients = new List<GONetRemoteClient>(maxClientCount);
 
@@ -66,16 +74,9 @@ namespace GONet
             server.OnClientMessageReceived += OnClientMessageReceived;
             server.TickBeginning += Server_TickBeginning_PossibleSeparateThread;
 
-            if (NetworkUtils.IsIPAddressOnLocalMachine(address))
+            if (NetworkUtils.IsLocalPortListening(port))
             {
-                if (NetworkUtils.IsLocalPortListening(port))
-                {
-                    GONetLog.Warning("Instantiated a server <instance> locally and the port is already occupied!!!  Calling the <instance>.Start() method will likely fail and return false.");
-                }
-            }
-            else
-            {
-                GONetLog.Warning("Instantiated a server <instance> locally and the address is not on this local machine!!!  Calling the <instance>.Start() method will likely fail and return false.");
+                GONetLog.Warning("Instantiated a server <instance> locally and the port is already occupied!!!  Calling the <instance>.Start() method will likely fail and return false.");
             }
         }
 
@@ -118,8 +119,8 @@ namespace GONet
         {
             try
             {
-                server.Start(90); // NOTE: this starts a separate thread where the server's Tick method is called
                 GONetMain.isServerOverride = true; // wherever the server is running is automatically considered "the" server
+                server.Start(90); // NOTE: this starts a separate thread where the server's Tick method is called
             }
             catch (Exception e)
             { // one main reason why here is if a server is already started on this machine on port....so this process will turn into a client
@@ -149,7 +150,6 @@ namespace GONet
             for (int iConnection = 0; iConnection < numConnections; ++iConnection)
             {
                 GONetConnection_ServerToClient gONetConnection_ServerToClient = remoteClients[iConnection].ConnectionToClient;
-
                 gONetConnection_ServerToClient.SendMessageOverChannel(bytes, bytesUsedCount, channelId);
             }
         }
@@ -260,7 +260,8 @@ namespace GONet
         {
             if (numConnections < MaxClientCount)
             {
-                GONetConnection_ServerToClient gonetConnection_ServerToClient = new GONetConnection_ServerToClient(client);
+                int maxQueueSize = GONetGlobal.Instance != null ? GONetGlobal.Instance.maxReliableMessageQueueSize : 2000;
+                GONetConnection_ServerToClient gonetConnection_ServerToClient = new GONetConnection_ServerToClient(client, maxQueueSize);
                 GONetRemoteClient remoteClient = new GONetRemoteClient(client, gonetConnection_ServerToClient);
                 remoteClients.Add(remoteClient);
                 ++numConnections;
@@ -287,6 +288,7 @@ namespace GONet
         public void Stop()
         {
             server.Stop();
+            GONetMain.isServerOverride = false; // wherever the server is running is automatically considered "the" server
         }
 
         public GONetRemoteClient GetRemoteClientByConnection(GONetConnection_ServerToClient connectionToClient)
@@ -302,6 +304,14 @@ namespace GONet
         public GONetRemoteClient GetRemoteClientByAuthorityId(ushort authorityId)
         {
             return remoteClientsByAuthorityId[authorityId];
+        }
+
+        public void AddP2pEndPoint(IPEndPoint p2pEndPoint)
+        {
+            server.AddP2pEndPoint(p2pEndPoint);
+            
+            // TODO consolidate this!!
+            GONetGlobal.ServerP2pEndPoint = p2pEndPoint;
         }
 
         internal void OnConnectionToClientAuthorityIdAssigned(GONetConnection_ServerToClient connectionToClient, ushort ownerAuthorityId)

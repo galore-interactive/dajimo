@@ -142,8 +142,16 @@ namespace ReliableNetcode
         private volatile ushort nextReceive;
         private volatile bool isTimeToProcessSendBuffer;
 
-        public ReliableMessageChannel()
+        // PHASE 1D: MessageQueue depth tracking for diagnostics
+        private double lastQueueDepthLogTime = 0.0;
+        private int lastLoggedQueueDepth = 0;
+
+        // Configurable maximum queue size (prevents unbounded memory growth)
+        private readonly int maxMessageQueueSize;
+
+        public ReliableMessageChannel(int maxQueueSize = 2000)
         {
+            maxMessageQueueSize = maxQueueSize;
             config = ReliableConfig.DefaultConfig();
             config.TransmitPacketCallback = (buffer, size) => {
                 TransmitCallback(buffer, size);
@@ -151,9 +159,14 @@ namespace ReliableNetcode
             config.ProcessPacketCallback = processPacket;
             config.AckPacketCallback = ackPacket;
 
-            sendBuffer = new SequenceBuffer<BufferedPacket>(256);
-            receiveBuffer = new SequenceBuffer<BufferedPacket>(256);
-            ackBuffer = new SequenceBuffer<OutgoingPacketSet>(256);
+            // PHASE 1A FIX: Increased capacity from 256 → 1024 to handle realistic production burst scenarios
+            // Previous capacity (256) was insufficient for medium/high latency scenarios (100-250ms RTT)
+            // New capacity (1024) handles burst up to 1000 messages even at high latency
+            // Memory cost: ~3.5MB per connection (acceptable trade-off for reliability)
+            // See: INVESTIGATION_BATCH_MESSAGE_LOSS_2025-10-12.md Section 10.7
+            sendBuffer = new SequenceBuffer<BufferedPacket>(1024);
+            receiveBuffer = new SequenceBuffer<BufferedPacket>(1024);
+            ackBuffer = new SequenceBuffer<OutgoingPacketSet>(1024);
 
             timeSeconds = DateTime.UtcNow.GetTotalSeconds();
             lastBufferFlush = -1.0;
@@ -194,16 +207,33 @@ namespace ReliableNetcode
 
             // see if we can pop messages off of the message queue and put them on the send queue
             if (messageQueue.Count > 0) {
+                // Count send buffer size ONCE before dequeue loop (optimization)
                 int sendBufferSize = 0;
                 for (ushort seq = oldestUnacked; PacketIO.SequenceLessThan(seq, this.sequence); seq++) {
                     if (sendBuffer.Exists(seq))
                         sendBufferSize++;
                 }
 
-                if (sendBufferSize < sendBuffer.Size) {
+                // Dequeue multiple messages per update to prevent channel starvation
+                // When many messages flood one reliable channel (e.g., spawn burst), this ensures
+                // other reliable messages (e.g., position updates) aren't delayed excessively
+                const int MAX_DEQUEUE_PER_UPDATE = 100;  // Process up to 100 messages per update
+                const double MAX_DEQUEUE_TIME_MS = 0.5;  // Stop after 0.5ms to protect frame time
+
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                int dequeuedCount = 0;
+
+                while (messageQueue.Count > 0 &&
+                       sendBufferSize < sendBuffer.Size &&
+                       dequeuedCount < MAX_DEQUEUE_PER_UPDATE &&
+                       stopwatch.Elapsed.TotalMilliseconds < MAX_DEQUEUE_TIME_MS)
+                {
                     var message = messageQueue.Dequeue();
                     SendMessage(message.InternalBuffer, message.Length);
                     ObjPool<ByteBuffer>.Return(message);
+
+                    sendBufferSize++;  // Track locally (safe: only this thread dequeues in this loop)
+                    dequeuedCount++;
                 }
             }
 
@@ -257,6 +287,53 @@ namespace ReliableNetcode
             if (timeSeconds - lastBufferFlush >= flushInterval) {
                 isTimeToProcessSendBuffer = true;
             }
+
+            // PHASE 1D FIX: MessageQueue depth logging for production diagnostics
+            // Log queue depth at different severity levels based on thresholds
+            // This provides visibility into transport congestion during operation
+            // See: INVESTIGATION_BATCH_MESSAGE_LOSS_2025-10-12.md Section 10.6
+            int currentQueueDepth = messageQueue.Count;
+            if (currentQueueDepth > 0)
+            {
+                // Log every 1 second at INFO level if queue is building (>50 messages)
+                // Log every 0.5 seconds at WARNING level if queue is high (>200 messages)
+                // Log every 0.1 seconds at CRITICAL level if queue is near limit (>400 messages)
+                double logInterval = 1.0;  // Default: INFO level, 1 second
+                string severity = "INFO";
+
+                if (currentQueueDepth > 400) {
+                    logInterval = 0.1;
+                    severity = "CRITICAL";
+                } else if (currentQueueDepth > 200) {
+                    logInterval = 0.5;
+                    severity = "WARNING";
+                } else if (currentQueueDepth <= 50) {
+                    logInterval = 5.0;  // Low queue depth: log every 5 seconds
+                }
+
+                bool shouldLog = (timeSeconds - lastQueueDepthLogTime >= logInterval);
+                bool queueDepthChanged = (currentQueueDepth != lastLoggedQueueDepth);
+
+                if (shouldLog && queueDepthChanged)
+                {
+                    // Use System.Diagnostics.Debug for low-level transport logging
+                    // This appears in Unity Editor console during development
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[{severity}] ReliableMessageChannel: messageQueue depth = {currentQueueDepth} " +
+                        $"(sendBuffer: {sendBuffer.Size}, RTT: {packetController.RTTMilliseconds:F1}ms, " +
+                        $"congestionControl: {congestionControl})");
+
+                    lastQueueDepthLogTime = timeSeconds;
+                    lastLoggedQueueDepth = currentQueueDepth;
+                }
+            }
+            else if (lastLoggedQueueDepth > 0)
+            {
+                // Queue drained - log recovery
+                System.Diagnostics.Debug.WriteLine(
+                    $"[INFO] ReliableMessageChannel: messageQueue drained (was {lastLoggedQueueDepth}, now 0)");
+                lastLoggedQueueDepth = 0;
+            }
         }
 
         public override void ProcessSendBuffer_IfAppropriate()
@@ -283,6 +360,25 @@ namespace ReliableNetcode
             }
 
             if (sendBufferSize == sendBuffer.Size) {
+                // PHASE 1B FIX: Bounds checking to prevent unbounded messageQueue growth
+                // In extreme edge cases (sustained 100+ spawns/sec + high packet loss), messageQueue could grow without limit
+                // This safety valve prevents memory exhaustion by throwing an exception when queue exceeds threshold
+                // Threshold: Configurable via maxMessageQueueSize (default 2000 messages = ~2.4MB at 1200 bytes/message average)
+                // NOTE: This is EXTREMELY RARE - requires sustained burst + high packet loss + slow ACKs simultaneously
+                // See: INVESTIGATION_BATCH_MESSAGE_LOSS_2025-10-12.md Section 8.1
+
+                if (messageQueue.Count >= maxMessageQueueSize)
+                {
+                    // CRITICAL: Queue exhaustion - throw exception to allow higher-level handling
+                    // This indicates severe network degradation (>90% packet loss) or server overload
+                    // Exception will be caught at GONet layer for error logging and diagnostics
+                    throw new ReliableQueueExhaustedException(
+                        currentQueueDepth: messageQueue.Count,
+                        maxQueueSize: maxMessageQueueSize,
+                        droppedMessageSize: bufferLength,
+                        channelId: ChannelID);
+                }
+
                 ByteBuffer tempBuff = ObjPool<ByteBuffer>.Get();
                 tempBuff.SetSize(bufferLength);
                 tempBuff.BufferCopy(buffer, 0, 0, bufferLength);
@@ -368,8 +464,11 @@ namespace ReliableNetcode
                 numUnacked++;
 
             for (ushort seq = oldestUnacked; PacketIO.SequenceLessThan(seq, this.sequence); seq++) {
+                // PHASE 1A FIX (PART 2): Use dynamic sendBuffer.Size instead of hardcoded 256
+                // This hardcoded value prevented messages beyond the first 256 from being sent
+                // even after increasing buffer capacity to 1024 in constructor
                 // never send message ID >= ( oldestUnacked + bufferSize )
-                if (seq >= (oldestUnacked + 256))
+                if (seq >= (oldestUnacked + sendBuffer.Size))
                     break;
 
                 // for any message that hasn't been sent in the last 0.1 seconds and fits in the available space of our message packer, add it
@@ -497,6 +596,18 @@ namespace ReliableNetcode
 
         public override string GetUsageStatistics()
         {
+            // PHASE 1C FIX: Added transport telemetry for messageQueue and sendBuffer utilization
+            // Previously had no visibility into messageQueue depth (caused Test 9 failure)
+            // Now exposes critical metrics for diagnosing congestion and transport health
+            // See: INVESTIGATION_BATCH_MESSAGE_LOSS_2025-10-12.md Section 10.3
+
+            // Calculate sendBuffer utilization (how full is it?)
+            int sendBufferUtilization = 0;
+            for (ushort seq = oldestUnacked; PacketIO.SequenceLessThan(seq, this.sequence); seq++) {
+                if (sendBuffer.Exists(seq))
+                    sendBufferUtilization++;
+            }
+
             StringBuilder stringBuilder = new StringBuilder(2000);
 
             const string SB = " sendBuffer.Size: ";
@@ -509,6 +620,8 @@ namespace ReliableNetcode
             const string SEQ = " sequence: ";
             const string NR = " nextReceive: ";
             const string LCST = " lastCongestionSwitchTime: ";
+            const string MQ = " messageQueue.Count: ";      // NEW: messageQueue depth
+            const string SBU = " sendBufferUtilization: ";   // NEW: sendBuffer occupancy
 
             stringBuilder
                 .Append(base.GetUsageStatistics())
@@ -522,7 +635,9 @@ namespace ReliableNetcode
                 .Append(SEQ).Append(sequence)
                 .Append(NR).Append(nextReceive)
                 .Append(LCST).Append(lastCongestionSwitchTime)
-                ; 
+                .Append(MQ).Append(messageQueue.Count)          // NEW: Queue depth visibility
+                .Append(SBU).Append(sendBufferUtilization)      // NEW: Buffer utilization visibility
+                ;
 
             return stringBuilder.ToString();
         }
