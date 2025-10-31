@@ -79,3 +79,10 @@ crashlytics-build.properties
 
 # Claude Code configuration
 .claude/
+
+# Markdown documentation (local working notes only, not tracked in git)
+*.md
+*.md.meta
+
+# Exception: Allow ONLY root README.md for GitHub
+!/README.md
