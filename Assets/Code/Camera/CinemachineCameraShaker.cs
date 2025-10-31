@@ -1,5 +1,5 @@
 using UnityEngine;
-using Cinemachine;
+using Unity.Cinemachine;
 
 public class CinemachineCameraShaker
 {
@@ -14,10 +14,10 @@ public class CinemachineCameraShaker
 
     public void Update()
     {
-        _noiseComponent.m_AmplitudeGain = 0f;
+        _noiseComponent.AmplitudeGain = 0f;
         if (_isPerformingAShake)
         {
-            _noiseComponent.m_AmplitudeGain = 1f;
+            _noiseComponent.AmplitudeGain = 1f;
             _shakeLeftTime -= Time.deltaTime;
             if (_shakeLeftTime <= 0f)
             {
@@ -45,7 +45,7 @@ public class CinemachineCameraShaker
         }
 
         _isPerformingAShake = true;
-        _noiseComponent.m_NoiseProfile = shakeSettings;
+        _noiseComponent.NoiseProfile = shakeSettings;
         _shakeLeftTime = duration;
     }
 }

@@ -1,5 +1,5 @@
 using UnityEngine;
-using Cinemachine;
+using Unity.Cinemachine;
 
 [CreateAssetMenu(menuName = "Scriptable Objects/Camera/Cinemachine Shake Configuration", fileName = "CinemachineShakeConfiguration")]
 public class CinemachineCameraShakeConfiguration : ScriptableObject

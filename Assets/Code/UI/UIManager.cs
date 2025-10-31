@@ -1,6 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
-using Cinemachine;
+using Unity.Cinemachine;
 using TMPro;
 using System;
 
@@ -9,11 +9,11 @@ public class UIManager : MonoBehaviour
     [SerializeField] private Button _startClientButton; // aka join room
     [SerializeField] private Button _startServerButton;
     [SerializeField] private Button exitButton; // context sensitive (exit game on start/join screen, exit room back to start/join screen in-game)
-    
+
     [SerializeField] private NetworkInitializer _networkInitializer;
     [SerializeField] private GameObject _startNetworkUIScreen;
 
-    [SerializeField] private CinemachineVirtualCamera _menuVirtualCamera;
+    [SerializeField] private CinemachineCamera _menuVirtualCamera;
     private CinemachineCameraSwitcher _cinemachineCameraSwitcher;
     private NetworkController _networkController;
 

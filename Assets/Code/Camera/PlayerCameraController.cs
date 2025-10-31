@@ -1,20 +1,20 @@
 using UnityEngine;
-using Cinemachine;
+using Unity.Cinemachine;
 
 [DisallowMultipleComponent]
-[RequireComponent(typeof(CinemachineVirtualCamera))]
+[RequireComponent(typeof(CinemachineCamera))]
 public class PlayerCameraController : MonoBehaviour
 {
-    private CinemachineVirtualCamera _virtualCamera;
+    private CinemachineCamera _virtualCamera;
     private CinemachineCameraSwitcher _cinemachineCameraSwitcher;
     private CinemachineCameraShaker _cameraShaker;
     [SerializeField] private CinemachineCameraShakeConfiguration _shakeConfiguration;
 
     private void Awake()
     {
-        _virtualCamera = GetComponent<CinemachineVirtualCamera>();
+        _virtualCamera = GetComponent<CinemachineCamera>();
         _cinemachineCameraSwitcher = FindObjectOfType<CinemachineCameraSwitcher>();
-        _cameraShaker = new CinemachineCameraShaker(_virtualCamera.GetCinemachineComponent<CinemachineBasicMultiChannelPerlin>());
+        _cameraShaker = new CinemachineCameraShaker(_virtualCamera.GetComponent<CinemachineBasicMultiChannelPerlin>());
     }
 
     public void SetCameraTarget(Transform target)
@@ -25,11 +25,12 @@ public class PlayerCameraController : MonoBehaviour
 
     private void SetVirtualCameraFollow(Transform target)
     {
-        _virtualCamera.Follow = target;
+        _virtualCamera.Target.TrackingTarget = target;
     }
     private void SetVirtualCameraLookAt(Transform target)
     {
-        _virtualCamera.LookAt = target;
+        _virtualCamera.Target.CustomLookAtTarget = true;
+        _virtualCamera.Target.LookAtTarget = target;
     }
 
     public void SetCameraAsMain()

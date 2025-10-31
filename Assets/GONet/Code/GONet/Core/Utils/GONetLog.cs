@@ -16,7 +16,7 @@
 using System.Diagnostics;
 using System.IO;
 using UnityEngine;
-using log4net;
+//using log4net; // COMMENTED OUT: log4net not available in Unity 6
 using System;
 using System.Threading;
 using System.Collections.Concurrent;
@@ -55,7 +55,7 @@ namespace GONet
         public delegate void LogDel(string logStr);
         public static event LogDel OnLog;
 
-        private static ILog _fileLogger;
+        //private static ILog _fileLogger; // COMMENTED OUT: log4net not available in Unity 6
 
         private static readonly string configXml = @" <log4net>
  
@@ -90,6 +90,8 @@ namespace GONet
         //const string logFilePlaceholder = "logs\\gonet.log";
         const string logFilePlaceholder = "____LOG_FILE_PATH____";
 
+        // COMMENTED OUT: log4net not available in Unity 6
+        /*
         static GONetLog()
         {
             _fileLogger = LogManager.GetLogger(typeof(GONetLog));
@@ -97,6 +99,7 @@ namespace GONet
             using Stream configXmlStream = StringUtils.GenerateStreamFromString(configXml);
             log4net.Config.XmlConfigurator.Configure(configXmlStream);
         }
+        */
 
         #region Append methods
 
@@ -280,6 +283,8 @@ namespace GONet
 
         private static void ProcessMessageViaLogger(string logString, string stackTrace, LogType type)
         {
+            // COMMENTED OUT: log4net not available in Unity 6
+            /*
             if (string.IsNullOrEmpty(stackTrace))
             {
                 switch (type)
@@ -335,6 +340,7 @@ namespace GONet
                     _fileLogger.Info(concattedMessage);
                 }
             }
+            */
             lastLog = logString;
 
             OnLog?.Invoke(lastLog);
