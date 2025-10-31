@@ -76,3 +76,6 @@ crashlytics-build.properties
 
 # Local only auto-updated GONet files
 /[Aa]ssets/GONet/Code/GONet/Generation/gonetParticipantAssetsPaths_to_lastFrameCountProcessed.bin*
+
+# Claude Code configuration
+.claude/
