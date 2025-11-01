@@ -11,8 +11,6 @@ public class NetworkInitializer : MonoBehaviour
     public event Action OnServerStart;
 
     [SerializeField] private ChristiansClockSyncronizator _christiansClockSyncronizatorPrefab;
-    private readonly ushort _port = 7777;
-    private readonly string _iP = "127.0.0.1";
     private readonly int MAX_CLIENT_COUNT_PER_SERVER = 100;
     private HashSet<Renderer> _renderers;
 

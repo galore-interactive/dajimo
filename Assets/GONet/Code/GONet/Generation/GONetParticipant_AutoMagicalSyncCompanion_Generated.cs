@@ -898,9 +898,10 @@ namespace GONet.Generation
                 return onlyMatchIfUniqueGroupingMatches.reliability == valueChangeSupport.syncAttribute_Reliability;
             }
 
-            // Regular sync: Match both frequency and reliability
+            // Regular sync: Match frequency, reliability, AND thread affinity
             return onlyMatchIfUniqueGroupingMatches.scheduleFrequency == valueChangeSupport.syncAttribute_SyncChangesEverySeconds &&
-                   onlyMatchIfUniqueGroupingMatches.reliability == valueChangeSupport.syncAttribute_Reliability;
+                   onlyMatchIfUniqueGroupingMatches.reliability == valueChangeSupport.syncAttribute_Reliability &&
+                   onlyMatchIfUniqueGroupingMatches.mustRunOnUnityMainThread == valueChangeSupport.syncAttribute_MustRunOnUnityMainThread;
         }
 
         internal void AppendListWithAllValues(List<GONetMain.AutoMagicalSync_ValueMonitoringSupport_ChangedValue> syncValuesToSend)
