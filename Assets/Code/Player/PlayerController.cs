@@ -201,7 +201,8 @@ public class PlayerController : GONetParticipantCompanionBehaviour, IPlayerNetwo
             SetOnlyArmsVisualsVisibility(true);
 
             _cameraController = FindObjectOfType<PlayerCameraController>();
-            _cameraController.SetCameraTarget(_cameraFollowTransform);
+            GONetLog.Debug($"[PlayerController] Found camera controller: {_cameraController != null}, using NoInterpolatedHeadTransform: {_noInterpolatedComponents.NoInterpolatedHeadTransform?.name}");
+            _cameraController.SetCameraTarget(_noInterpolatedComponents.NoInterpolatedHeadTransform);
             _cameraController.SetCameraAsMain();
 
             _inputsController = new PlayerInputsController(InputsHandlerType.Player);
@@ -889,7 +890,8 @@ public class PlayerController : GONetParticipantCompanionBehaviour, IPlayerNetwo
             _fullBodyVisuals.enabled = false;
             _onlyArmsVisuals.enabled = true;
 
-            _cameraController.SetCameraTarget(_cameraFollowTransform);
+            GONetLog.Debug($"[PlayerController] ActivateEntityControl_Internal: Setting camera target to {_noInterpolatedComponents.NoInterpolatedHeadTransform?.name}");
+            _cameraController.SetCameraTarget(_noInterpolatedComponents.NoInterpolatedHeadTransform);
             _cameraController.SetCameraAsMain();
 
             PlayerLocalContext.Mine._isBipedInRagdollState = false;

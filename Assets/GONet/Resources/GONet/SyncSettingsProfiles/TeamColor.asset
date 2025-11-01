@@ -29,7 +29,7 @@ MonoBehaviour:
   VelocityAnchorIntervalSeconds: 0
   VelocityQuantizationResultingPrecision: 0.039063 units/sec
   ProcessingPriority: 0
-  MustRunOnUnityMainThread: 0
+  MustRunOnUnityMainThread: 1
   PhysicsUpdateInterval: 1
   EnablePhysicsSnapping: 0
   SyncValueTypeSerializerOverrides: []

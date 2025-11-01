@@ -8562,10 +8562,12 @@ namespace GONet
                 int tickReceiversCount = tickReceivers.Count;
                 if (tickReceiversCount > 0)
                 {
-                    GONetBehaviour[] tickReceiversSnapshot = tickReceivers_arrayPool.Borrow(tickReceiversCount);
-                    int actualCount = 0;
+                    GONetBehaviour[] tickReceiversSnapshot = null;
                     try
                     {
+                        tickReceiversSnapshot = tickReceivers_arrayPool.Borrow(tickReceiversCount);
+                        int actualCount = 0;
+
                         // Try to copy - if collection is modified during copy, we'll catch and skip this tick cycle
                         foreach (var tickReceiver in tickReceivers)
                         {
@@ -8581,8 +8583,12 @@ namespace GONet
                     }
                     finally
                     {
-                        // CRITICAL: Always return to pool, even if exception thrown
-                        tickReceivers_arrayPool.Return(tickReceiversSnapshot);
+                        // CRITICAL: Only return if we successfully borrowed
+                        // THREAD SAFETY: tickReceivers_arrayPool is shared across threads, so Contains() check prevents double-return
+                        if (tickReceiversSnapshot != null && tickReceivers_arrayPool.Contains(tickReceiversSnapshot))
+                        {
+                            tickReceivers_arrayPool.Return(tickReceiversSnapshot);
+                        }
                     }
                 }
             }

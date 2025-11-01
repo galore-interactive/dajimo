@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Assertions;
 using Unity.Cinemachine;
+using GONet;
 
 public class CinemachineCameraSwitcher : MonoBehaviour
 {
@@ -37,6 +38,8 @@ public class CinemachineCameraSwitcher : MonoBehaviour
         bool foundSuccesfully = _trackedCamerasToNames.TryGetValue(newCameraName, out camera);
         Assert.IsTrue(foundSuccesfully, $"[{this.GetType().Name} at SwitchCamera]: There are no tracked cameras called: {newCameraName}");
 
+        GONetLog.Debug($"[CinemachineCameraSwitcher] Switching to camera: {newCameraName}");
+
         SetCameraPriority(camera, ACTIVE_CAMERA_PRIORITY);
         _activeCameraName = newCameraName;
 
@@ -44,13 +47,30 @@ public class CinemachineCameraSwitcher : MonoBehaviour
         {
             if(!_activeCameraName.Equals(cameraData.Key))
             {
+                GONetLog.Debug($"[CinemachineCameraSwitcher] Disabling camera: {cameraData.Key}, setting priority to 0");
                 SetCameraPriority(cameraData.Value, 0);
             }
         }
+
+        GONetLog.Debug($"[CinemachineCameraSwitcher] Active camera is now: {_activeCameraName} with priority {ACTIVE_CAMERA_PRIORITY}");
     }
 
     private void SetCameraPriority(CinemachineCamera camera, int priority)
     {
-        camera.Priority = priority;
+        GONetLog.Debug($"[CinemachineCameraSwitcher] SetCameraPriority BEFORE: camera={camera.name}, priority to set={priority}, current priority={camera.Priority.Value}, enabled={camera.Priority.Enabled}");
+
+        // Cinemachine 3.x: Must create new PrioritySettings struct and assign it
+        camera.Priority = new Unity.Cinemachine.PrioritySettings
+        {
+            Enabled = true,
+            Value = priority
+        };
+
+        GONetLog.Debug($"[CinemachineCameraSwitcher] SetCameraPriority AFTER assignment: priority={camera.Priority.Value}, enabled={camera.Priority.Enabled}");
+
+        // Ensure camera component is enabled
+        camera.enabled = true;
+
+        GONetLog.Debug($"[CinemachineCameraSwitcher] SetCameraPriority FINAL: camera.enabled={camera.enabled}, priority={camera.Priority.Value}");
     }
 }

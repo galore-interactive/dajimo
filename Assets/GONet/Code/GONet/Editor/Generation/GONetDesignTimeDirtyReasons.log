@@ -10,3 +10,5 @@
 2025-10-31 11:15:34: GONetAutoMagicalSyncSettings_ProfileTemplate at 'Assets/GONet/Resources/GONet/SyncSettingsProfiles/_GONet_EntityState_NoInterpolated.asset' has changed member values in editor.
 2025-10-31 11:31:46: Important member data of a GONetParticipant has changed values in editor. Path:scene://DATS_Main/GONet_GlobalContext
 2025-10-31 11:31:46: GONetParticipant properties changed on GameObject: scene://DATS_Main/GONet_GlobalContext (Design-time only).
+2025-11-01 11:20:43: GONetAutoMagicalSyncSettings_ProfileTemplate at 'Assets/GONet/Resources/GONet/SyncSettingsProfiles/TeamColor.asset' has changed member values in editor.
+2025-11-01 11:21:09: GONetAutoMagicalSyncSettings_ProfileTemplate at 'Assets/GONet/Resources/GONet/SyncSettingsProfiles/_GONet_EntityState_NoInterpolated.asset' has changed member values in editor.
