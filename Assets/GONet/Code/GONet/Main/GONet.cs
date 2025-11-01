@@ -8542,7 +8542,10 @@ namespace GONet
             double uniqueElapsedSeconds = TimeSpan.FromTicks(elapsedTicks).TotalSeconds;
             double uniqueDeltaSeconds = TimeSpan.FromTicks(elapsedTicks - uniqueElapsedTicks_previous).TotalSeconds;
 
-            { // account for some tick receivers adding or removing during a call to tick, which must avoid updating collection while enumerating it
+            // CRITICAL: Wrap entire tick receiver processing in try-catch to handle collection modification at any point
+            try
+            {
+                // Account for some tick receivers adding or removing during a call to tick, which must avoid updating collection while enumerating it
                 foreach (var tickReceiver in tickReceivers_awaitingAdd)
                 {
                     tickReceivers.Add(tickReceiver);
@@ -8553,41 +8556,41 @@ namespace GONet
                     tickReceivers.Remove(tickReceiver);
                 }
                 tickReceivers_awaitingRemove.Clear();
+
+                // PERFORMANCE FIX: Use GONet's ArrayPool to avoid GC from ToArray() - zero allocations after warmup
+                // CRITICAL: The HashSet enumeration itself can throw if modified, so we try/catch it
+                int tickReceiversCount = tickReceivers.Count;
+                if (tickReceiversCount > 0)
+                {
+                    GONetBehaviour[] tickReceiversSnapshot = tickReceivers_arrayPool.Borrow(tickReceiversCount);
+                    int actualCount = 0;
+                    try
+                    {
+                        // Try to copy - if collection is modified during copy, we'll catch and skip this tick cycle
+                        foreach (var tickReceiver in tickReceivers)
+                        {
+                            if (actualCount >= tickReceiversSnapshot.Length) break; // Safety check
+                            tickReceiversSnapshot[actualCount++] = tickReceiver;
+                        }
+
+                        // Iterate using actual count (not array.Length, which may be larger than needed)
+                        for (int i = 0; i < actualCount; i++)
+                        {
+                            tickReceiversSnapshot[i].Tick(uniqueGrouping.scheduleFrequencyHz, uniqueElapsedSeconds, uniqueDeltaSeconds);
+                        }
+                    }
+                    finally
+                    {
+                        // CRITICAL: Always return to pool, even if exception thrown
+                        tickReceivers_arrayPool.Return(tickReceiversSnapshot);
+                    }
+                }
             }
-
-            // PERFORMANCE FIX: Use GONet's ArrayPool to avoid GC from ToArray() - zero allocations after warmup
-            // CRITICAL: The HashSet enumeration itself can throw if modified, so we try/catch it
-            int tickReceiversCount = tickReceivers.Count;
-            if (tickReceiversCount > 0)
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Collection was modified"))
             {
-                GONetBehaviour[] tickReceiversSnapshot = tickReceivers_arrayPool.Borrow(tickReceiversCount);
-                int actualCount = 0;
-                try
-                {
-                    // Try to copy - if collection is modified during copy, we'll catch and skip this tick cycle
-                    foreach (var tickReceiver in tickReceivers)
-                    {
-                        if (actualCount >= tickReceiversSnapshot.Length) break; // Safety check
-                        tickReceiversSnapshot[actualCount++] = tickReceiver;
-                    }
-
-                    // Iterate using actual count (not array.Length, which may be larger than needed)
-                    for (int i = 0; i < actualCount; i++)
-                    {
-                        tickReceiversSnapshot[i].Tick(uniqueGrouping.scheduleFrequencyHz, uniqueElapsedSeconds, uniqueDeltaSeconds);
-                    }
-                }
-                catch (InvalidOperationException ex) when (ex.Message.Contains("Collection was modified"))
-                {
-                    // Collection was modified during enumeration - this can happen if Tick() callbacks
-                    // trigger add/remove that bypasses the deferred system. Skip this tick cycle.
-                    GONetLog.Warning($"tickReceivers collection modified during Tick() - skipping this sync cycle for {uniqueGrouping}. This should be rare.");
-                }
-                finally
-                {
-                    // CRITICAL: Always return to pool, even if exception thrown
-                    tickReceivers_arrayPool.Return(tickReceiversSnapshot);
-                }
+                // Collection was modified during enumeration - this can happen if Tick() callbacks
+                // trigger add/remove that bypasses the deferred system. Skip this tick cycle.
+                GONetLog.Warning($"tickReceivers collection modified during tick processing - skipping this sync cycle for {uniqueGrouping}. This should be rare.");
             }
 
             autoSyncUniqueGroupingToLastElapsedTicks[uniqueGrouping] = elapsedTicks;

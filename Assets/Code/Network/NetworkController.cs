@@ -463,7 +463,8 @@ public class NetworkController : GONetParticipantCompanionBehaviour
         if ((object)playerLocalContext != default)
         {
             // Since gonet does not fire the value changed event when first loading up, we need to do some things manually (TODO get gonet to fire the event after initial deserialize init)
-            OnPlayerTypeChanged_ReadyToProcess(playerLocalContext.CurrentPlayerType, playerLocalContext.GetClientOwnerId());
+            // IMPORTANT: Use AttemptProcess (not ReadyToProcess) to handle race condition where controllers aren't registered yet
+            OnPlayerTypeChanged_AttemptProcess(playerLocalContext.CurrentPlayerType, playerLocalContext.GetClientOwnerId());
         }
     }
 
