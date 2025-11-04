@@ -413,29 +413,15 @@ public class PlayerController : GONetParticipantCompanionBehaviour, IPlayerNetwo
 
     private void Remote_OnEntityEvent(GONetEventEnvelope<LocalContextEntityEvent> eventEnvelope)
     {
-        GONetLog.Info($"[PlayerController.Remote_OnEntityEvent] Received event type: {eventEnvelope.Event.type}, IsServer: {IsServer}, GONetId: {eventEnvelope.Event.GONetId}");
-
         if (IsServer)
         {
-            GONetLog.Info($"[PlayerController.Remote_OnEntityEvent] Entering switch statement. Event type value: {(int)eventEnvelope.Event.type}, EV_FIRE_WEAPON value: {(int)EntityEventType.EV_FIRE_WEAPON}");
-
             switch (eventEnvelope.Event.type)
             {
                 case EntityEventType.EV_FIRE_WEAPON:
-                    GONetLog.Info($"[PlayerController.Remote_OnEntityEvent] EV_FIRE_WEAPON - SourceAuthId: {eventEnvelope.SourceAuthorityId}, EnvGNP.OwnerAuthId: {eventEnvelope.GONetParticipant.OwnerAuthorityId}, this.GNP.OwnerAuthId: {gonetParticipant.OwnerAuthorityId}");
                     if (eventEnvelope.GONetParticipant.OwnerAuthorityId == gonetParticipant.OwnerAuthorityId)
                     {
-                        GONetLog.Info($"[PlayerController.Remote_OnEntityEvent] Authority IDs match - Calling Server_Shoot()");
                         Server_Shoot();
                     }
-                    else
-                    {
-                        GONetLog.Info($"[PlayerController.Remote_OnEntityEvent] Authority IDs do NOT match - skipping");
-                    }
-                    break;
-
-                default:
-                    GONetLog.Info($"[PlayerController.Remote_OnEntityEvent] Event type did NOT match EV_FIRE_WEAPON. Got type: {eventEnvelope.Event.type}");
                     break;
             }
         }
@@ -812,14 +798,12 @@ public class PlayerController : GONetParticipantCompanionBehaviour, IPlayerNetwo
     {
         if (IsClient && GONetParticipant.IsMine)
         {
-            GONetLog.Info($"[PlayerController.OnShotPerformed] CLIENT FIRED SHOT - Creating EV_FIRE_WEAPON event, GONetId: {GetNetworkEntityId()}");
             _armsOnlyAnimationsController.PlayShootAnimation();
             _audioSource.clip = _shotSound;
             _audioSource.Play();
 
             LocalContextEntityEvent fireWeaponEntityEvent = new LocalContextEntityEvent(EntityEventType.EV_FIRE_WEAPON, false, null, GetNetworkEntityId());
             _networkController.CreateEntityEvent(GetNetworkEntityId(), fireWeaponEntityEvent);
-            GONetLog.Info($"[PlayerController.OnShotPerformed] Event created and added to NetworkController");
         }
         else
         {

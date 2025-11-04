@@ -33,14 +33,11 @@ public class ShotProcessor : GONetParticipantCompanionBehaviour
     {
         base.OnGONetReady();
 
-        GONetLog.Info($"[ShotProcessor.OnGONetReady] Subscribing to LocalContextEntityEvent, IsClient: {IsClient}");
         EventBus.Subscribe<LocalContextEntityEvent>(ReceiveEntityEvent);
     }
 
     private void ReceiveEntityEvent(GONetEventEnvelope<LocalContextEntityEvent> entityEventEnvelope)
     {
-        GONetLog.Info($"[ShotProcessor.ReceiveEntityEvent] Received event type: {entityEventEnvelope.Event.type}, IsClient: {IsClient}, myASSuMEdPlayerGNP: {myASSuMEdPlayerGNP != null}");
-
         if (!IsClient || !myASSuMEdPlayerGNP) return;
 
         LocalContextEntityEvent entityEvent = entityEventEnvelope.Event;
