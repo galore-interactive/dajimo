@@ -60,8 +60,8 @@ MonoBehaviour:
   m_Cascade3Split: {x: 0.1, y: 0.3}
   m_Cascade4Split: {x: 0.067, y: 0.2, z: 0.467}
   m_CascadeBorder: 0.1
-  m_ShadowDepthBias: 1
-  m_ShadowNormalBias: 1
+  m_ShadowDepthBias: 0.7
+  m_ShadowNormalBias: 0.4
   m_AnyShadowsSupported: 1
   m_SoftShadowsSupported: 1
   m_ConservativeEnclosingSphere: 0
@@ -106,19 +106,19 @@ MonoBehaviour:
   m_PrefilterXRKeywords: 1
   m_PrefilteringModeForwardPlus: 0
   m_PrefilteringModeDeferredRendering: 0
-  m_PrefilteringModeScreenSpaceOcclusion: 2
+  m_PrefilteringModeScreenSpaceOcclusion: 0
   m_PrefilterDebugKeywords: 1
   m_PrefilterWriteRenderingLayers: 1
   m_PrefilterHDROutput: 1
   m_PrefilterAlphaOutput: 1
   m_PrefilterSSAODepthNormals: 1
-  m_PrefilterSSAOSourceDepthLow: 0
+  m_PrefilterSSAOSourceDepthLow: 1
   m_PrefilterSSAOSourceDepthMedium: 1
   m_PrefilterSSAOSourceDepthHigh: 1
   m_PrefilterSSAOInterleaved: 1
-  m_PrefilterSSAOBlueNoise: 0
+  m_PrefilterSSAOBlueNoise: 1
   m_PrefilterSSAOSampleCountLow: 1
-  m_PrefilterSSAOSampleCountMedium: 0
+  m_PrefilterSSAOSampleCountMedium: 1
   m_PrefilterSSAOSampleCountHigh: 1
   m_PrefilterDBufferMRT1: 1
   m_PrefilterDBufferMRT2: 1

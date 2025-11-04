@@ -127,6 +127,14 @@ namespace GONet
             // started before GONetLocal was ready
             GONetLog.Info($"[GONetLocal] GONetLocal added to lookup (OwnerAuthorityId: {gonetLocal.OwnerAuthorityId}), checking all IsMine participants for readiness");
 
+            // DIAGNOSTIC: Log current state of all GONetLocals in lookup
+            GONetLog.Info($"[GONETLOCAL-SYNC] {(GONetMain.IsServer ? "SERVER" : "CLIENT")}: GONetLocal added to lookup - OwnerAuthorityId: {gonetLocal.OwnerAuthorityId}, GONetId: {gonetLocal.GONetParticipant.GONetId}, IsMine: {gonetLocal.GONetParticipant.IsMine}, Time: {GONetMain.Time.ElapsedSeconds:F3}s");
+            GONetLog.Info($"[GONETLOCAL-SYNC] {(GONetMain.IsServer ? "SERVER" : "CLIENT")}: Total GONetLocals in lookup after add: {localsByAuthorityId.Count}");
+            foreach (var kvp in localsByAuthorityId)
+            {
+                GONetLog.Info($"[GONETLOCAL-SYNC] {(GONetMain.IsServer ? "SERVER" : "CLIENT")}:   - OwnerAuthorityId: {kvp.Key}, GONetId: {kvp.Value.GONetParticipant.GONetId}, Name: '{kvp.Value.gameObject.name}'");
+            }
+
             // Check GONetLocal itself - publish for ALL (IsMine AND remote) once added to lookup
             // This ensures Client #1 sees OnGONetReady when Client #2's GONetLocal is added to lookup
             if (GONetMain.IsGONetReady(gonetLocal.GONetParticipant))

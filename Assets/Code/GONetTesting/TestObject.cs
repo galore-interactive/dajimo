@@ -5,9 +5,9 @@ using GONet;
 
 public class TestObject : GONetParticipantCompanionBehaviour
 {
-    public override void OnGONetParticipantStarted()
+    public override void OnGONetReady()
     {
-        base.OnGONetParticipantStarted();
+        base.OnGONetReady();
         Debug.Log("YEAH");
     }
 }

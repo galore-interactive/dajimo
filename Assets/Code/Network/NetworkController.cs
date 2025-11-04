@@ -120,6 +120,8 @@ public class NetworkController : GONetParticipantCompanionBehaviour
     {
         base.OnGONetClientVsServerStatusKnown(isClient, isServer, myAuthorityId);
 
+        GONetLog.Info($"[NetworkController.OnGONetClientVsServerStatusKnown] IsClient: {isClient}, IsServer: {isServer}, MyAuthorityId: {myAuthorityId}");
+
         _networkRPCHandler = new GONetRPCHandler();
         _entityEventsHolder.Initialize();
 
@@ -155,6 +157,8 @@ public class NetworkController : GONetParticipantCompanionBehaviour
 
         _isSpawned = true;
         IsTickReceiver = true;
+
+        GONetLog.Info($"[NetworkController.OnGONetClientVsServerStatusKnown] Initialization complete. _isSpawned: {_isSpawned}, IsTickReceiver: {IsTickReceiver}");
     }
 
     private bool FindAssosiatedBipedEntity(uint bipedEntityId, out IPlayerNetworkEntity bipedEntity)
@@ -613,6 +617,8 @@ public class NetworkController : GONetParticipantCompanionBehaviour
     {
         if (!IsServer) return;
 
+        GONetLog.Info($"[NetworkController.Server_PublishShotEvent] Publishing event type: {entityEvent.type}, GONetParticipantId: {entityEvent.GONetParticipantId}, position: {position}");
+
         entityEvent.vector3 = position;
         entityEvent.quaternion = rotation;
 
@@ -826,12 +832,34 @@ public class NetworkController : GONetParticipantCompanionBehaviour
         return _networkRPCHandler;
     }
 
+    private int _tickCallCount = 0;
+    private int _totalTickCallCount = 0;
+    private bool _hasLoggedTickRates = false;
+
     internal override void Tick(short uniqueTickHz, double elapsedSeconds, double deltaTime)
     {
         base.Tick(uniqueTickHz, elapsedSeconds, deltaTime);
 
+        _totalTickCallCount++;
+
+        // Log first few ticks to see what rates are being called
+        if (!_hasLoggedTickRates && _totalTickCallCount <= 5)
+        {
+            GONetLog.Info($"[NetworkController.Tick] Total call #{_totalTickCallCount}, uniqueTickHz: {uniqueTickHz}, expected: {TICK_RATE_HZ}, match: {uniqueTickHz == TICK_RATE_HZ}");
+            if (_totalTickCallCount == 5)
+            {
+                _hasLoggedTickRates = true;
+            }
+        }
+
         if (uniqueTickHz == TICK_RATE_HZ)
         {
+            _tickCallCount++;
+            if (_tickCallCount == 1 || _tickCallCount % 300 == 0)
+            {
+                GONetLog.Info($"[NetworkController.Tick] Matched TICK_RATE_HZ! Called {_tickCallCount} times, _isSpawned: {_isSpawned}, IsClient: {IsClient}, IsServer: {IsServer}");
+            }
+
             if (!_isSpawned)
             {
                 return;

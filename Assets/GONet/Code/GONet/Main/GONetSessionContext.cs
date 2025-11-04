@@ -30,11 +30,31 @@ namespace GONet
         private void Awake()
         {
             GONetLog.Debug(WORKAROUND);
+
+            // DIAGNOSTIC: Log when GONetSessionContext (and its GONetLocal) is instantiated
+            var gonetLocal = GetComponent<GONetLocal>();
+            if (gonetLocal != null)
+            {
+                GONetLog.Info($"[DDOL-TIMING] GONetSessionContext.Awake() - GONetLocal '{gameObject.name}' instantiated in scene '{gameObject.scene.name}' at {GONetMain.Time.ElapsedSeconds:F3}s");
+            }
         }
 
         private void Start()
         {
+            // DIAGNOSTIC: Log BEFORE moving to DDOL
+            var gonetLocal = GetComponent<GONetLocal>();
+            if (gonetLocal != null)
+            {
+                GONetLog.Info($"[DDOL-TIMING] GONetSessionContext.Start() - BEFORE DontDestroyOnLoad: GONetLocal '{gameObject.name}' in scene '{gameObject.scene.name}' at {GONetMain.Time.ElapsedSeconds:F3}s");
+            }
+
             DontDestroyOnLoad(gameObject); // IMPORTANT: This was moved from Awake to Start so it runs AFTER onSceneLoaded processes and this is recognized as a "design time GONetParticipant"...somehow moving into DDOL in Awake was too soon and it did not get categorized as design time
+
+            // DIAGNOSTIC: Log AFTER moving to DDOL
+            if (gonetLocal != null)
+            {
+                GONetLog.Info($"[DDOL-TIMING] GONetSessionContext.Start() - AFTER DontDestroyOnLoad: GONetLocal '{gameObject.name}' now in scene '{gameObject.scene.name}' at {GONetMain.Time.ElapsedSeconds:F3}s");
+            }
         }
     }
 }

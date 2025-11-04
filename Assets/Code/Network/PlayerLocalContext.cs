@@ -31,7 +31,9 @@ namespace DATS
             GONetLocal local = GONetLocal.LookupByAuthorityId[authorityId];
             if (local == null)
             {
-                GONetLog.Error($"Expecting to find GONetLocal for authorityId: {authorityId} but did not.  Therefore, cannot find PlayerLocalContext as desired.");
+                // Note: With GONet 1.5's OnGONetReady() lifecycle, GONetLocal should be in lookup.
+                // If you see this log, ensure you're using OnGONetReady() instead of OnGONetParticipantStarted().
+                GONetLog.Warning($"GONetLocal for authorityId: {authorityId} not found in lookup. This may indicate use of old lifecycle hooks instead of OnGONetReady().");
                 return default;
             }
 

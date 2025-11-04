@@ -1952,6 +1952,14 @@ namespace GONet
             const string IR = "pub/sub Instantiate REMOTE about to process...";
             //GONetLog.Debug(IR + $" gonetId: {eventEnvelope.Event.GONetId}, DesignTimeLocation: '{eventEnvelope.Event.DesignTimeLocation}', SceneIdentifier: '{eventEnvelope.Event.SceneIdentifier}', InstanceName: '{eventEnvelope.Event.InstanceName}'");
 
+            // DIAGNOSTIC: Log incoming InstantiateGONetParticipantEvent - check if it's a GONetLocal based on DesignTimeLocation
+            bool isGONetLocalSpawn = !string.IsNullOrEmpty(eventEnvelope.Event.DesignTimeLocation) &&
+                                      eventEnvelope.Event.DesignTimeLocation.Contains("GONetLocal");
+            if (isGONetLocalSpawn)
+            {
+                GONetLog.Info($"[GONETLOCAL-SYNC] {(IsServer ? "SERVER" : "CLIENT")}: RECEIVED InstantiateGONetParticipantEvent for GONetLocal - GONetId: {eventEnvelope.Event.GONetId}, SourceAuthorityId: {eventEnvelope.SourceAuthorityId}, DesignTimeLocation: '{eventEnvelope.Event.DesignTimeLocation}', Time: {Time.ElapsedSeconds:F3}s");
+            }
+
             // Check if this spawn requires a scene that isn't loaded yet
             if (!string.IsNullOrEmpty(eventEnvelope.Event.SceneIdentifier))
             {
@@ -1961,6 +1969,10 @@ namespace GONet
                 {
                     // Defer this spawn until the required scene is loaded
                     //GONetLog.Warning($"[SPAWN_SYNC] DEFERRING spawn for GONetId {eventEnvelope.Event.GONetId} - waiting for scene '{eventEnvelope.Event.SceneIdentifier}' to load");
+                    if (isGONetLocalSpawn)
+                    {
+                        GONetLog.Warning($"[GONETLOCAL-SYNC] {(IsServer ? "SERVER" : "CLIENT")}: DEFERRING GONetLocal spawn - waiting for scene '{eventEnvelope.Event.SceneIdentifier}' to load");
+                    }
                     deferredSpawnEvents.Add(eventEnvelope.Event);
                     return;
                 }
@@ -1973,7 +1985,16 @@ namespace GONet
             if (instance == null)
             {
                 GONetLog.Warning($"Skipping remote instantiation processing - Instantiate_Remote returned null for GONetId: {eventEnvelope.Event.GONetId}");
+                if (isGONetLocalSpawn)
+                {
+                    GONetLog.Error($"[GONETLOCAL-SYNC] {(IsServer ? "SERVER" : "CLIENT")}: FAILED to instantiate GONetLocal! GONetId: {eventEnvelope.Event.GONetId}");
+                }
                 return;
+            }
+
+            if (isGONetLocalSpawn)
+            {
+                GONetLog.Info($"[GONETLOCAL-SYNC] {(IsServer ? "SERVER" : "CLIENT")}: Successfully instantiated GONetLocal - GONetId: {instance.GONetId}, OwnerAuthorityId: {instance.OwnerAuthorityId}, Name: '{instance.gameObject.name}'");
             }
 
             // Complete the post-instantiation processing
@@ -6513,6 +6534,24 @@ namespace GONet
             ushort authorityId = newClientGONetLocal.GONetParticipant.OwnerAuthorityId;
             GONetLog.Info($"[INIT-TIMELINE] SERVER: Server_OnNewClientInstantiatedItsGONetLocal() CALLED for AuthorityId {authorityId} at {Time.ElapsedSeconds:F3}s");
 
+            // DIAGNOSTIC: Log all existing GONetLocal instances that should be visible to other clients
+            GONetLog.Info($"[GONETLOCAL-SYNC] SERVER: New client {authorityId} connected. Checking existing GONetLocals...");
+            int gonetLocalCount = 0;
+            using (var enumerator = GONetLocal.GetEnumerator_AllGONetLocals())
+            {
+                while (enumerator.MoveNext())
+                {
+                    var kvp = enumerator.Current;
+                    GONetLocal existingLocal = kvp.Value;
+                    if (existingLocal != null && existingLocal.GONetParticipant != null)
+                    {
+                        gonetLocalCount++;
+                        GONetLog.Info($"[GONETLOCAL-SYNC] SERVER: Existing GONetLocal #{gonetLocalCount} - OwnerAuthorityId: {existingLocal.OwnerAuthorityId}, GONetId: {existingLocal.GONetParticipant.GONetId}, Name: '{existingLocal.gameObject.name}'");
+                    }
+                }
+            }
+            GONetLog.Info($"[GONETLOCAL-SYNC] SERVER: Total existing GONetLocals: {gonetLocalCount}");
+
             GONetRemoteClient remoteClient = _gonetServer.GetRemoteClientByAuthorityId(authorityId);
             GONetLog.Info($"[INIT-TIMELINE] SERVER: About to set remoteClient.IsInitializedWithServer=true for AuthorityId {authorityId} at {Time.ElapsedSeconds:F3}s");
 
@@ -8985,6 +9024,13 @@ namespace GONet
             }
 
             //GONetLog.Debug($"Publish InstantiateGONetParticipantEvent now. gonetId: {gonetParticipant.GONetId}"); /////////////////////////// DREETS!
+
+            // DIAGNOSTIC: Log GONetLocal spawn events specifically
+            if (gonetParticipant.gameObject.GetComponent<GONetLocal>() != null)
+            {
+                GONetLog.Info($"[GONETLOCAL-SYNC] {(IsServer ? "SERVER" : "CLIENT")}: Publishing InstantiateGONetParticipantEvent for GONetLocal - OwnerAuthorityId: {gonetParticipant.OwnerAuthorityId}, GONetId: {gonetParticipant.GONetId}, Time: {Time.ElapsedSeconds:F3}s");
+            }
+
             EventBus.Publish(@event); // this causes the auto propagation via local handler to send to all remotes (i.e., all clients if server, server if client)
 
             gonetParticipant.IsOKToStartAutoMagicalProcessing = true; // VERY IMPORTANT that this comes AFTER publishing the event so the flood gates to start syncing data come AFTER other parties are made aware of the GNP in the above event!
@@ -11721,68 +11767,98 @@ namespace GONet
         /// </summary>
         public static bool IsGONetReady(GONetParticipant gonetParticipant)
         {
+            bool result = true;
+            string blockingReason = null;
+
             // Check basic participant initialization
             if (gonetParticipant == null ||
                 gonetParticipant.OwnerAuthorityId == OwnerAuthorityId_Unset ||
                 gonetParticipant.gonetId_raw == GONetParticipant.GONetIdRaw_Unset ||
                 !gonetParticipant.IsInternallyConfigured)
             {
-                return false;
+                if (gonetParticipant == null) blockingReason = "participant is NULL";
+                else if (gonetParticipant.OwnerAuthorityId == OwnerAuthorityId_Unset) blockingReason = $"OwnerAuthorityId not set (GONetId: {gonetParticipant.GONetId})";
+                else if (gonetParticipant.gonetId_raw == GONetParticipant.GONetIdRaw_Unset) blockingReason = "GONetId not set";
+                else blockingReason = $"IsInternallyConfigured=false (GONetId: {gonetParticipant.GONetId})";
+                result = false;
             }
 
             // Check client/server status is known
-            if (!IsClientVsServerStatusKnown)
+            else if (!IsClientVsServerStatusKnown)
             {
-                return false;
+                blockingReason = $"IsClientVsServerStatusKnown=false (GONetId: {gonetParticipant.GONetId})";
+                result = false;
             }
 
             // If we're a client, ensure client instance exists and is fully initialized
-            if (IsClient)
+            else if (IsClient)
             {
                 if (GONetClient == null)
                 {
-                    return false; // Client but no client instance - not ready
+                    blockingReason = $"GONetClient is NULL (GONetId: {gonetParticipant.GONetId})";
+                    result = false;
                 }
-
-                if (!GONetClient.IsInitializedWithServer)
+                else if (!GONetClient.IsInitializedWithServer)
                 {
-                    return false; // Client exists but not initialized with server
+                    blockingReason = $"GONetClient.IsInitializedWithServer=false (GONetId: {gonetParticipant.GONetId})";
+                    result = false;
                 }
             }
 
             // Check GONetLocal lookup is available
-            if (GONetLocal.LookupByAuthorityId == null)
+            if (result && GONetLocal.LookupByAuthorityId == null)
             {
-                return false;
+                blockingReason = $"GONetLocal.LookupByAuthorityId is NULL (GONetId: {gonetParticipant.GONetId})";
+                result = false;
             }
 
             // Use the indexer to look up the GONetLocal for this participant's authority ID
-            // The indexer returns null if not found (safe, no exceptions)
-            GONetLocal local = GONetLocal.LookupByAuthorityId[gonetParticipant.OwnerAuthorityId];
-            if (local == null)
+            GONetLocal local = null;
+            if (result)
             {
-                return false;
+                local = GONetLocal.LookupByAuthorityId[gonetParticipant.OwnerAuthorityId];
+                if (local == null)
+                {
+                    blockingReason = $"GONetLocal not found for OwnerAuthorityId {gonetParticipant.OwnerAuthorityId} (GONetId: {gonetParticipant.GONetId})";
+                    result = false;
+                }
             }
 
             // LIFECYCLE GATE: Check Unity lifecycle completion (Awake, Start)
-            if (!gonetParticipant.didAwakeComplete || !gonetParticipant.didStartComplete)
+            if (result && (!gonetParticipant.didAwakeComplete || !gonetParticipant.didStartComplete))
             {
-                return false; // Unity lifecycle not yet complete
+                blockingReason = $"Unity lifecycle incomplete - didAwakeComplete: {gonetParticipant.didAwakeComplete}, didStartComplete: {gonetParticipant.didStartComplete} (GONetId: {gonetParticipant.GONetId})";
+                result = false;
             }
 
             // LIFECYCLE GATE: Check deserialization requirement (if needed for remote objects)
-            if (gonetParticipant.requiresDeserializeInit && !gonetParticipant.didDeserializeInitComplete)
+            if (result && gonetParticipant.requiresDeserializeInit && !gonetParticipant.didDeserializeInitComplete)
             {
-                return false; // Waiting for remote sync data (DeserializeInitAllCompleted)
+                blockingReason = $"Deserialization incomplete - requiresDeserializeInit: true, didDeserializeInitComplete: false (GONetId: {gonetParticipant.GONetId})";
+                result = false;
             }
 
             // LIFECYCLE GATE: Ensure not in limbo state (client batch exhaustion edge case)
-            if (gonetParticipant.Client_IsInLimbo)
+            if (result && gonetParticipant.Client_IsInLimbo)
             {
-                return false; // Still waiting for GONetId batch from server
+                blockingReason = $"Client_IsInLimbo=true (GONetId: {gonetParticipant.GONetId})";
+                result = false;
             }
 
-            return true;
+            // Log the result for GONetId 3073 specifically (the problematic participant)
+            if (gonetParticipant != null && gonetParticipant.GONetId == 3073)
+            {
+                if (result)
+                {
+                    GONetLog.Info($"[IsGONetReady] GONetId 3073 is READY - OwnerAuthId: {gonetParticipant.OwnerAuthorityId}, IsClient: {IsClient}, IsServer: {IsServer}");
+                }
+                else
+                {
+                    GONetLog.Info($"[IsGONetReady] GONetId 3073 is NOT READY - Reason: {blockingReason}");
+                }
+            }
+
+            return result;
         }
 
         /// <summary>
@@ -11843,22 +11919,45 @@ namespace GONet
         /// </summary>
         internal static void CheckAndPublishOnGONetReady_IfAllConditionsMet(GONetParticipant gonetParticipant)
         {
+            // Log entry for GONetId 3073 specifically
+            if (gonetParticipant != null && gonetParticipant.GONetId == 3073)
+            {
+                GONetLog.Info($"[CheckAndPublishOnGONetReady] ENTRY for GONetId 3073 - didOnGONetReadyFire: {gonetParticipant.didOnGONetReadyFire}");
+            }
+
             // Prevent duplicate calls - OnGONetReady should only fire once
             if (gonetParticipant.didOnGONetReadyFire)
             {
+                if (gonetParticipant != null && gonetParticipant.GONetId == 3073)
+                {
+                    GONetLog.Info($"[CheckAndPublishOnGONetReady] GONetId 3073 - Already fired, returning early");
+                }
                 return; // Already fired, nothing to do
             }
 
             // Check if all prerequisites are met (delegates to IsGONetReady)
-            if (!IsGONetReady(gonetParticipant))
+            bool isReady = IsGONetReady(gonetParticipant);
+
+            if (gonetParticipant != null && gonetParticipant.GONetId == 3073)
+            {
+                GONetLog.Info($"[CheckAndPublishOnGONetReady] GONetId 3073 - IsGONetReady returned: {isReady}");
+            }
+
+            if (!isReady)
             {
                 return; // Not ready yet, wait for next milestone
             }
 
             // All conditions met! Mark as fired and broadcast OnGONetReady to all GONetBehaviours
+            if (gonetParticipant != null && gonetParticipant.GONetId == 3073)
+            {
+                GONetLog.Info($"[CheckAndPublishOnGONetReady] GONetId 3073 - All conditions met! Broadcasting to {allGONetBehaviours.Count} behaviours");
+            }
+
             gonetParticipant.didOnGONetReadyFire = true;
 
             // Broadcast OnGONetReady to all registered GONetBehaviours
+            int broadcastCount = 0;
             using (var en = allGONetBehaviours.GetEnumerator())
             {
                 while (en.MoveNext())
@@ -11866,13 +11965,24 @@ namespace GONet
                     GONetBehaviour gnBehaviour = en.Current;
                     try
                     {
+                        if (gonetParticipant != null && gonetParticipant.GONetId == 3073)
+                        {
+                            GONetLog.Info($"[CheckAndPublishOnGONetReady] GONetId 3073 - Broadcasting to behaviour: {gnBehaviour.GetType().Name} on '{gnBehaviour.gameObject.name}'");
+                        }
+
                         gnBehaviour.OnGONetReady(gonetParticipant);
+                        broadcastCount++;
                     }
                     catch (Exception ex)
                     {
                         GONetLog.Error($"[GONet] Exception in OnGONetReady() broadcast for behaviour '{gnBehaviour.GetType().Name}' on '{gnBehaviour.gameObject.name}' with participant '{gonetParticipant.name}': {ex.Message}\n{ex.StackTrace}");
                     }
                 }
+            }
+
+            if (gonetParticipant != null && gonetParticipant.GONetId == 3073)
+            {
+                GONetLog.Info($"[CheckAndPublishOnGONetReady] GONetId 3073 - Completed broadcasting to {broadcastCount} behaviours");
             }
 
             // NEW: This participant is now ready - try processing deferred sync bundles

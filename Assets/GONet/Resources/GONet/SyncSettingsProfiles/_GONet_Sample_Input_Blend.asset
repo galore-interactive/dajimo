@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: _GONet_Sample_Input_Blend
   m_EditorClassIdentifier: 
   SyncChangesASAP: 0
-  SyncChangesFrequencyOccurrences: 24
+  SyncChangesFrequencyOccurrences: 32
   SyncChangesFrequencyUnitOfTime: 0
   SendViaReliability: 1
   ShouldBlendBetweenValuesReceived: 1
@@ -21,8 +21,17 @@ MonoBehaviour:
   QuantizeLowerBound: -1.7014117e+38
   QuantizeUpperBound: 1.7014117e+38
   QuantizationResultingPrecision: <full precision - no quantization will occur>
+  IsVelocityEligible: 1
+  AutoCalculateVelocityQuantization: 1
+  VelocityQuantizeLowerBound: -20
+  VelocityQuantizeUpperBound: 20
+  VelocityQuantizeDownToBitCount: 10
+  VelocityAnchorIntervalSeconds: 0
+  VelocityQuantizationResultingPrecision: 0.039063 units/sec
   ProcessingPriority: 0
   MustRunOnUnityMainThread: 1
+  PhysicsUpdateInterval: 1
+  EnablePhysicsSnapping: 0
   SyncValueTypeSerializerOverrides: []
   SyncValueTypeValueBlendingOverrides:
   - ValueType: 9

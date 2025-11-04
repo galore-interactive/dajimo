@@ -21,8 +21,17 @@ MonoBehaviour:
   QuantizeLowerBound: -1
   QuantizeUpperBound: 1
   QuantizationResultingPrecision: <full precision - no quantization will occur>
+  IsVelocityEligible: 1
+  AutoCalculateVelocityQuantization: 1
+  VelocityQuantizeLowerBound: -20
+  VelocityQuantizeUpperBound: 20
+  VelocityQuantizeDownToBitCount: 10
+  VelocityAnchorIntervalSeconds: 0
+  VelocityQuantizationResultingPrecision: 0.039063 units/sec
   ProcessingPriority: 0
   MustRunOnUnityMainThread: 1
+  PhysicsUpdateInterval: 1
+  EnablePhysicsSnapping: 0
   SyncValueTypeSerializerOverrides:
   - ValueType: 11
     CustomSerializerType:

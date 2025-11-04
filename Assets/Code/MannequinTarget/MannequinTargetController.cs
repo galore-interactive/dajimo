@@ -46,9 +46,9 @@ public class MannequinTargetController : GONetParticipantCompanionBehaviour, INe
     }
 
     //OnNetworkSpawn
-    public override void OnGONetParticipantStarted()
+    public override void OnGONetReady()
     {
-        base.OnGONetParticipantStarted();
+        base.OnGONetReady();
         if(IsServer)
         {
             _movement = new MannequinMovement(_waypoint1, _waypoint2, _movementSpeed);

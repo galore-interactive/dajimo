@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: _GONet_EntityState_NoInterpolated
   m_EditorClassIdentifier: Assembly-CSharp::GONet.GONetAutoMagicalSyncSettings_ProfileTemplate
   SyncChangesASAP: 1
-  SyncChangesFrequencyOccurrences: 24
+  SyncChangesFrequencyOccurrences: 32
   SyncChangesFrequencyUnitOfTime: 0
   SendViaReliability: 0
   ShouldBlendBetweenValuesReceived: 0

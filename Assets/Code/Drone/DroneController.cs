@@ -75,9 +75,9 @@ public class DroneController : GONetParticipantCompanionBehaviour, IPlayerNetwor
         }
     }
 
-    public override void OnGONetParticipantStarted()
+    public override void OnGONetReady()
     {
-        base.OnGONetParticipantStarted();
+        base.OnGONetReady();
 
         _networkController = FindObjectOfType<NetworkController>();
         _stateVariables = new PlayerStateVariables(_networkController, IsServer);

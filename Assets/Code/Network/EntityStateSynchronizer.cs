@@ -29,9 +29,9 @@ public class EntityStateSynchronizer : GONetParticipantCompanionBehaviour
         _targetEntityIdSubscription = GONetMain.EventBus.Subscribe(SyncEvent_GeneratedTypes.SyncEvent_EntityStateSynchronizer_targetEntityId, OnTargetEntityIdChanged);
     }
 
-    public override void OnGONetParticipantStarted()
+    public override void OnGONetReady()
     {
-        base.OnGONetParticipantStarted();
+        base.OnGONetReady();
 
         if(IsClient)
         {

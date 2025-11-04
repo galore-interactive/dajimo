@@ -5,9 +5,9 @@ public class ObstacleController : GONetParticipantCompanionBehaviour, IDamageabl
     private Health _healthComponent;
     private NetworkController _networkController;
 
-    public override void OnGONetParticipantStarted()
+    public override void OnGONetReady()
     {
-        base.OnGONetParticipantStarted();
+        base.OnGONetReady();
 
         if (IsServer)
         {

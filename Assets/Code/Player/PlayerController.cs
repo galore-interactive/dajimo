@@ -102,23 +102,52 @@ public class PlayerController : GONetParticipantCompanionBehaviour, IPlayerNetwo
     protected override void Awake()
     {
         base.Awake();
+
+        GONetLog.Info($"[PlayerController.Awake] GameObject: {gameObject.name}, GONetParticipant exists: {gonetParticipant != null}");
         _audioSource = GetComponent<AudioSource>();
         splitRotationHolder = new OwnedRotation<PlayerController>(this, splitRotation);
-    /*}
-
-    public override void OnGONetParticipantEnabled()
-    {
-        base.OnGONetParticipantEnabled();
-    */
-        GONetMain.EventBus.Subscribe(
-            //SyncEvent_GeneratedTypes.SyncEvent_PlayerController_currentTeamColor, OnMyCurrentColorTeamChanged, (e) => e.GONetParticipant == gonetParticipant);
-            SyncEvent_GeneratedTypes.SyncEvent_PlayerLocalContext_currentTeamColor, OnMyCurrentColorTeamChanged);
     }
 
-    public override void OnGONetParticipantStarted()
+    public override void OnGONetReady(GONetParticipant gonetParticipant)
     {
-        base.OnGONetParticipantStarted();
+        base.OnGONetReady(gonetParticipant);
 
+        GONetLog.Info($"[PlayerController.OnGONetReady] Called with participant GONetId: {gonetParticipant?.GONetId}, this.gonetParticipant GONetId: {this.gonetParticipant?.GONetId}, Match: {gonetParticipant == this.gonetParticipant}, GONetId Match: {gonetParticipant?.GONetId == this.gonetParticipant?.GONetId}");
+
+        // This is called for ALL participants (own and remote)
+        // Only initialize THIS PlayerController if it's for THIS participant
+        // Use GONetId comparison instead of reference equality for IL2CPP compatibility
+        if (gonetParticipant == null || this.gonetParticipant == null)
+        {
+            GONetLog.Warning($"[PlayerController.OnGONetReady] Null participant detected - gonetParticipant null: {gonetParticipant == null}, this.gonetParticipant null: {this.gonetParticipant == null}");
+            return;
+        }
+
+        if (gonetParticipant.GONetId != this.gonetParticipant.GONetId)
+        {
+            GONetLog.Info($"[PlayerController.OnGONetReady] Skipping - not for this PlayerController's participant");
+            return; // This PlayerController is not for this participant, skip
+        }
+
+        // Continue with normal initialization for OUR participant
+        GONetLog.Info($"[PlayerController.OnGONetReady] Proceeding with initialization for THIS participant");
+
+        try
+        {
+            OnGONetReady_Internal();
+            GONetLog.Info($"[PlayerController.OnGONetReady] Successfully completed initialization for GONetId: {gonetParticipant.GONetId}");
+        }
+        catch (System.Exception ex)
+        {
+            GONetLog.Error($"[PlayerController.OnGONetReady] Exception during initialization: {ex.Message}\n{ex.StackTrace}");
+        }
+    }
+
+    /// <summary>
+    /// Internal initialization called from OnGONetReady when this component's participant is ready
+    /// </summary>
+    private void OnGONetReady_Internal()
+    {
         if (GONetParticipant.IsMine)
         {
             ShotProcessor.SetMyLocalPlayerGNP(GONetParticipant);
@@ -195,8 +224,11 @@ public class PlayerController : GONetParticipantCompanionBehaviour, IPlayerNetwo
             networkedSplitRotationHolder: splitRotationHolder,
             fullBodyAnimationsController: _fullBodyAnimationsController);
 
+        GONetLog.Info($"[PlayerController.OnGONetReady] GONetId: {GONetParticipant.GONetId}, OwnerAuthorityId: {GONetParticipant.OwnerAuthorityId}, IsMine: {GONetParticipant.IsMine}, MyAuthorityId: {GONetMain.MyAuthorityId}");
+
         if (GONetParticipant.IsMine)
         {
+            GONetLog.Info($"[PlayerController] Setting FIRST-PERSON view (arms only) for GONetId: {GONetParticipant.GONetId}");
             SetFullBodyVisualsVisibility(false);
             SetOnlyArmsVisualsVisibility(true);
 
@@ -215,6 +247,7 @@ public class PlayerController : GONetParticipantCompanionBehaviour, IPlayerNetwo
         }
         else
         {
+            GONetLog.Info($"[PlayerController] Setting THIRD-PERSON view (full body) for GONetId: {GONetParticipant.GONetId}");
             SetFullBodyVisualsVisibility(true);
             SetOnlyArmsVisualsVisibility(false);
         }
@@ -227,31 +260,126 @@ public class PlayerController : GONetParticipantCompanionBehaviour, IPlayerNetwo
             }
         }
 
+        if (IsClient && GONetParticipant.IsMine)
+        {
+            // Initialize color for local player - GONetLocal is guaranteed to be in lookup
+            Client_InitColor();
+        }
+
         if (IsClient)
         {
-            StartCoroutine(WaitForMyLocalContext(() => Client_InitColor()));
-
             _dummyDroneFollow = GameObject.Instantiate(_dummyDronePrefab, _noInterpolatedComponents.NoInterpolatedPlayerPosition + new Vector3(0, DummyDroneFollow.FOLLOW_ABOVE_DISTANCE, 0), Quaternion.identity);
             _dummyDroneFollow.SetFollowTransform(_noInterpolatedComponents.NoInterpolatedPlayerPositionSource);
+        }
+
+        // For remote players, color will be initialized via sync event when PlayerLocalContext becomes available
+        if (IsClient && !GONetParticipant.IsMine)
+        {
+            StartCoroutine(WaitForRemotePlayerColor());
         }
 
         _isActivated = true;
         _isSpawned = true;
     }
 
-    IEnumerator WaitForMyLocalContext(Action thenDoThis)
+    /// <summary>
+    /// Fallback mechanism to ensure initialization happens even if OnGONetReady never fires
+    /// (can happen in IL2CPP builds where GONet's callback system may not work reliably)
+    /// </summary>
+    private IEnumerator FallbackInitializationCheck()
     {
-        while (PlayerLocalContext.LookupByAuthorityId(gonetParticipant.OwnerAuthorityId) == null)
-        {
-            yield return null;
-        }
+        // Wait 2 seconds for normal initialization
+        yield return new WaitForSeconds(2f);
 
-        thenDoThis();
+        GONetLog.Info($"[PlayerController.FallbackCheck] Initial check - GONetId: {gonetParticipant?.GONetId}, _isSpawned: {_isSpawned}, IsReady: {(gonetParticipant != null ? GONetMain.IsGONetReady(gonetParticipant).ToString() : "null")}");
+
+        // If still not spawned, wait for participant to be ready and force initialization
+        if (!_isSpawned && gonetParticipant != null)
+        {
+            GONetLog.Info($"[PlayerController.FallbackCheck] Entering wait loop for GONetId: {gonetParticipant.GONetId}");
+
+            // Wait up to 10 more seconds for participant to be ready
+            float waitTime = 0f;
+            while (gonetParticipant != null && !GONetMain.IsGONetReady(gonetParticipant) && waitTime < 10f)
+            {
+                if (waitTime == 0f || waitTime % 2f == 0f) // Log every 2 seconds
+                {
+                    GONetLog.Info($"[PlayerController.FallbackCheck] Still waiting... {waitTime}s elapsed, participant ready: {GONetMain.IsGONetReady(gonetParticipant)}");
+                }
+                yield return new WaitForSeconds(0.5f);
+                waitTime += 0.5f;
+            }
+
+            if (gonetParticipant == null)
+            {
+                GONetLog.Error($"[PlayerController.FallbackCheck] Participant became null during wait!");
+                yield break;
+            }
+
+            GONetLog.Info($"[PlayerController.FallbackCheck] Finished waiting - {waitTime}s elapsed, GONetId: {gonetParticipant.GONetId}, _isSpawned: {_isSpawned}, IsReady: {GONetMain.IsGONetReady(gonetParticipant)}");
+
+            if (!_isSpawned && GONetMain.IsGONetReady(gonetParticipant))
+            {
+                GONetLog.Warning($"[PlayerController] FALLBACK: Forcing initialization for GONetId: {gonetParticipant.GONetId}, IsMine: {gonetParticipant.IsMine}");
+                OnGONetReady_Internal();
+                _isSpawned = true;
+            }
+            else if (!_isSpawned && !GONetMain.IsGONetReady(gonetParticipant))
+            {
+                GONetLog.Error($"[PlayerController.FallbackCheck] Participant {gonetParticipant.GONetId} still not ready after {waitTime}s! Giving up.");
+            }
+            else if (_isSpawned)
+            {
+                GONetLog.Info($"[PlayerController.FallbackCheck] Was spawned during wait for GONetId: {gonetParticipant.GONetId}");
+            }
+        }
+        else if (_isSpawned)
+        {
+            GONetLog.Info($"[PlayerController.FallbackCheck] Already spawned, no fallback needed for GONetId: {gonetParticipant?.GONetId}");
+        }
+        else if (gonetParticipant == null)
+        {
+            GONetLog.Error($"[PlayerController.FallbackCheck] Participant is null!");
+        }
     }
 
     /// <summary>
-    /// PRE: <see cref="PlayerLocalContext"/> is available for lookup and use for this gonetParticipant's OwnerAuthorityId, because it is the source of the
-    ///      initial value of <see cref="currentTeamColor"/>.
+    /// Waits for remote player's PlayerLocalContext to be available, then initializes color.
+    /// This handles the case where a late-joining client sees an existing player before their
+    /// PlayerLocalContext is fully initialized.
+    /// </summary>
+    private IEnumerator WaitForRemotePlayerColor()
+    {
+        PlayerLocalContext remoteContext = null;
+        int attempts = 0;
+        const int maxAttempts = 300; // 5 seconds at 60fps
+
+        while (remoteContext == null && attempts < maxAttempts)
+        {
+            remoteContext = PlayerLocalContext.LookupByAuthorityId(gonetParticipant.OwnerAuthorityId);
+            if (remoteContext == null)
+            {
+                attempts++;
+                yield return null;
+            }
+        }
+
+        if (remoteContext != null && _fullBodyPlayerController != null)
+        {
+            // Now we can safely get the color
+            Color teamColor = _networkController.ColorTeamAssigner.GetColor(remoteContext.currentTeamColor);
+            _fullBodyPlayerController.SetColorTeam(teamColor);
+            //GONetLog.Debug($"[Remote Player] Set color for authorityId {gonetParticipant.OwnerAuthorityId}: {teamColor}");
+        }
+        else
+        {
+            GONetLog.Warning($"[Remote Player] Failed to initialize color for authorityId {gonetParticipant.OwnerAuthorityId} after {maxAttempts} attempts");
+        }
+    }
+
+    /// <summary>
+    /// Initializes the player's color based on their team assignment.
+    /// Called from OnGONetReady() which guarantees PlayerLocalContext is available in lookup for local player.
     /// </summary>
     private void Client_InitColor()
     {
@@ -277,21 +405,37 @@ public class PlayerController : GONetParticipantCompanionBehaviour, IPlayerNetwo
             SyncEvent_GeneratedTypes.SyncEvent_GONetParticipant_GONetId, OnMyGONetParticipantIdChanged, (e) => e.GONetParticipant == gonetParticipant);
 
         GONetMain.EventBus.Subscribe<LocalContextEntityEvent>(Remote_OnEntityEvent, (e) => e.IsSourceRemote);
+
+        GONetMain.EventBus.Subscribe(
+            //SyncEvent_GeneratedTypes.SyncEvent_PlayerController_currentTeamColor, OnMyCurrentColorTeamChanged, (e) => e.GONetParticipant == gonetParticipant);
+            SyncEvent_GeneratedTypes.SyncEvent_PlayerLocalContext_currentTeamColor, OnMyCurrentColorTeamChanged);
     }
 
     private void Remote_OnEntityEvent(GONetEventEnvelope<LocalContextEntityEvent> eventEnvelope)
     {
+        GONetLog.Info($"[PlayerController.Remote_OnEntityEvent] Received event type: {eventEnvelope.Event.type}, IsServer: {IsServer}, GONetId: {eventEnvelope.Event.GONetId}");
+
         if (IsServer)
         {
+            GONetLog.Info($"[PlayerController.Remote_OnEntityEvent] Entering switch statement. Event type value: {(int)eventEnvelope.Event.type}, EV_FIRE_WEAPON value: {(int)EntityEventType.EV_FIRE_WEAPON}");
+
             switch (eventEnvelope.Event.type)
             {
                 case EntityEventType.EV_FIRE_WEAPON:
-                    //GONetLog.Debug($"Shotski.  From source auth id: {eventEnvelope.SourceAuthorityId}");
+                    GONetLog.Info($"[PlayerController.Remote_OnEntityEvent] EV_FIRE_WEAPON - SourceAuthId: {eventEnvelope.SourceAuthorityId}, EnvGNP.OwnerAuthId: {eventEnvelope.GONetParticipant.OwnerAuthorityId}, this.GNP.OwnerAuthId: {gonetParticipant.OwnerAuthorityId}");
                     if (eventEnvelope.GONetParticipant.OwnerAuthorityId == gonetParticipant.OwnerAuthorityId)
                     {
-                        //GONetLog.Debug($"Shotski.  From source auth id: {eventEnvelope.SourceAuthorityId}");
+                        GONetLog.Info($"[PlayerController.Remote_OnEntityEvent] Authority IDs match - Calling Server_Shoot()");
                         Server_Shoot();
                     }
+                    else
+                    {
+                        GONetLog.Info($"[PlayerController.Remote_OnEntityEvent] Authority IDs do NOT match - skipping");
+                    }
+                    break;
+
+                default:
+                    GONetLog.Info($"[PlayerController.Remote_OnEntityEvent] Event type did NOT match EV_FIRE_WEAPON. Got type: {eventEnvelope.Event.type}");
                     break;
             }
         }
@@ -668,13 +812,14 @@ public class PlayerController : GONetParticipantCompanionBehaviour, IPlayerNetwo
     {
         if (IsClient && GONetParticipant.IsMine)
         {
-            //GONetLog.Debug("SHOTSKI");
+            GONetLog.Info($"[PlayerController.OnShotPerformed] CLIENT FIRED SHOT - Creating EV_FIRE_WEAPON event, GONetId: {GetNetworkEntityId()}");
             _armsOnlyAnimationsController.PlayShootAnimation();
             _audioSource.clip = _shotSound;
             _audioSource.Play();
 
             LocalContextEntityEvent fireWeaponEntityEvent = new LocalContextEntityEvent(EntityEventType.EV_FIRE_WEAPON, false, null, GetNetworkEntityId());
             _networkController.CreateEntityEvent(GetNetworkEntityId(), fireWeaponEntityEvent);
+            GONetLog.Info($"[PlayerController.OnShotPerformed] Event created and added to NetworkController");
         }
         else
         {

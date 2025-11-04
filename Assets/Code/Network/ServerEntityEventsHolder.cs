@@ -57,13 +57,20 @@ public class ServerEntityEventsHolder
 
     public void PublishCurrentTickEvents()
     {
+        int totalEventsPublished = 0;
         foreach (List<LocalContextEntityEvent> entityEvents in _entityEvents.Values)
         {
             foreach (LocalContextEntityEvent entityEvent in entityEvents)
             {
+                GONetLog.Info($"[ServerEntityEventsHolder.PublishCurrentTickEvents] Publishing event type: {entityEvent.type}, GONetId: {entityEvent.GONetId}, IsServer: {GONetMain.IsServer}, IsClient: {GONetMain.IsClient}");
                 GONetMain.EventBus.Publish(entityEvent, shouldPublishReliably: true);
+                totalEventsPublished++;
             }
             entityEvents.Clear();
+        }
+        if (totalEventsPublished > 0)
+        {
+            GONetLog.Info($"[ServerEntityEventsHolder.PublishCurrentTickEvents] Published {totalEventsPublished} events total");
         }
     }
 }
