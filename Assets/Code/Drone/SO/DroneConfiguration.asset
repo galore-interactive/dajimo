@@ -16,6 +16,6 @@ MonoBehaviour:
     _movementSpeed: 7
     _movementAccelerationTime: 0.13
   _cameraMovementConfiguration:
-    _mouseSensitivity: 64
+    _mouseSensitivity: 4
     _cameraMovementAcceleration: 0.05
     _verticalClampAngle: 35

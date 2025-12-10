@@ -1,8 +1,14 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class DroneInputsHandler : I_InputsHandler
 {
     private readonly PlayerInputActions _inputActionAsset;
+    private bool _isUsingGamepad = false;
+
+    // Thresholds for detecting active input device
+    private const float GAMEPAD_STICK_THRESHOLD = 0.1f;
+    private const float MOUSE_DELTA_THRESHOLD = 0.5f;
 
     public DroneInputsHandler(PlayerInputActions inputActionAsset)
     {
@@ -29,24 +35,67 @@ public class DroneInputsHandler : I_InputsHandler
     public Vector2 MovementDirectionInputVector2Normalized => throw new System.NotImplementedException();
     public Vector3 MovementDirectionInputVector3Normalized => _inputActionAsset.Drone.Move.ReadValue<Vector3>();
 
+    public bool IsUsingGamepad => _isUsingGamepad;
+
     public Vector2 CameraMovementInput
     {
         get
         {
 #if !UNITY_EDITOR && (UNITY_ANDROID || UNITY_IOS)
-            Vector2 rawInput = _inputActionAsset.Drone.CameraMove.ReadValue<Vector2>();
-            Vector2 squared = rawInput * rawInput;
-            const float MULTIPLIER = 1.15f;
-            Vector2 final = squared * MULTIPLIER;
-            if (rawInput.x < 0) final.x = -final.x;
-            if (rawInput.y < 0) final.y = -final.y;
-            return final;
+            _isUsingGamepad = true;
+            return GetGamepadCameraMovementInput();
 #else
-            return _inputActionAsset.Drone.CameraMove.ReadValue<Vector2>() * 0.05f;
+            UpdateActiveInputDevice();
+            return _isUsingGamepad ? GetGamepadCameraMovementInput() : GetMouseCameraMovementInput();
 #endif
         }
     }
 
+    private void UpdateActiveInputDevice()
+    {
+        // Check for gamepad right stick input
+        if (Gamepad.current != null)
+        {
+            Vector2 rightStick = Gamepad.current.rightStick.ReadValue();
+            if (rightStick.sqrMagnitude > GAMEPAD_STICK_THRESHOLD * GAMEPAD_STICK_THRESHOLD)
+            {
+                _isUsingGamepad = true;
+                return;
+            }
+        }
+
+        // Check for mouse movement
+        if (Mouse.current != null)
+        {
+            Vector2 mouseDelta = Mouse.current.delta.ReadValue();
+            if (mouseDelta.sqrMagnitude > MOUSE_DELTA_THRESHOLD * MOUSE_DELTA_THRESHOLD)
+            {
+                _isUsingGamepad = false;
+            }
+        }
+    }
+
+    private Vector2 GetMouseCameraMovementInput()
+    {
+        Vector2 raw = Mouse.current != null ? Mouse.current.delta.ReadValue() : Vector2.zero;
+        return raw * 0.05f;
+    }
+
+    private Vector2 GetGamepadCameraMovementInput()
+    {
+        if (Gamepad.current == null) return Vector2.zero;
+
+        Vector2 rawInput = Gamepad.current.rightStick.ReadValue();
+        // Apply non-linear response curve for better gamepad feel
+        Vector2 squared = rawInput * rawInput;
+        const float MULTIPLIER = 1.15f;
+
+        Vector2 final = squared * MULTIPLIER;
+        if (rawInput.x < 0) final.x = -final.x;
+        if (rawInput.y < 0) final.y = -final.y;
+
+        return final;
+    }
 
     public bool IsSwitchWeaponInputBeingPressed => throw new System.NotImplementedException();
     public bool IsRealoadingInputBeingPressed => throw new System.NotImplementedException();

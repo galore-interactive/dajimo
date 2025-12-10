@@ -22,13 +22,13 @@ public class PlayerCameraMovement
 
     private float CalculateHorizontalRotation(Vector2 input, float currentHorizontalRotation, float deltaTime)
     {
-        currentHorizontalRotation += input.x * _playerCameraMovementData.MouseSensitivity * deltaTime;
+        currentHorizontalRotation += input.x * _playerCameraMovementData.MouseSensitivity;
         return currentHorizontalRotation;
     }
 
     private float CalculateVerticalAngle(Vector2 input, float currentVerticalRotation, float deltaTime)
     {
-        currentVerticalRotation += input.y * _playerCameraMovementData.MouseSensitivity * deltaTime;
+        currentVerticalRotation += input.y * _playerCameraMovementData.MouseSensitivity;
         currentVerticalRotation = Mathf.Clamp(currentVerticalRotation, -_playerCameraMovementData.VerticalClampAngle, _playerCameraMovementData.VerticalClampAngle);
         return currentVerticalRotation;
     }
