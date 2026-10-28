@@ -1,3 +1,5 @@
+NOTE: This repo represents the -OLD- version of DAJIMO before we overhauled/improved/expanded everything, went GONet Legendary and went to Steam (see https://store.steampowered.com/app/5427320/Dajimo_Arena_Team_Showdown_Demo/)!
+
 # DAJIMO ARENA: TEAM SHOWDOWN
 Example FPS game project using GONet as the multiplayer netcode powerhouse.
 
